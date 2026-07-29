@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import os
+
 from pyspark.sql import SparkSession
+
 from risk_analytics.config import load_config
+
 
 def create_spark_session(app_name: str, ref: str = "main") -> SparkSession:
     """Create the project Spark entry point for remote notebooks or batch jobs.

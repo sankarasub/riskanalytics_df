@@ -14,9 +14,9 @@ This platform addresses a common analytics challenge: risk calculations depend o
 - **Declarative transformation framework.** YAML pipeline definitions express joins, lookups, filters, reshaping, aggregation, normalization, deduplication, and target write behavior without hard-coding each data flow in Python.
 - **Risk metric calculation.** The delivered risk pipeline calculates gross exposure, netting exposure, collateral after haircut, potential future exposure (PFE), and value at risk (VaR).
 - **Version-aware publishing.** Each risk run can execute on an isolated Nessie branch and merge into the shared `main` reference once the write path succeeds.
-- **Operational orchestration.** Airflow DAGs coordinate bootstrap, source transformations, and final metric publication; Kafka integration supports event-driven execution and publication notifications.
-- **Accessible analytics.** Streamlit dashboards, JupyterLab, Dremio, and a FastAPI links portal provide business, engineering, notebook, SQL, and service-discovery access.
-- **Verification built in.** Unit tests validate configuration, Spark session setup, YAML execution semantics, bootstrap behavior, Nessie interactions, health checks, and orchestration command construction.
+- **Operational orchestration.** Airflow DAGs coordinate bootstrap, source transformations, and final metric publication. The eight source/entity chains fan out concurrently, and per-entity Kafka sensor DAGs give every entity an event-driven STAGE -> ODS -> risk-metrics path.
+- **Accessible analytics.** Streamlit dashboards, JupyterLab, Dremio, and a FastAPI operations API (health, catalog listing, pipeline execution, plus the links portal) provide business, engineering, notebook, SQL, and service-discovery access.
+- **Verification built in.** Unit tests validate configuration, Spark session setup, YAML execution semantics, bootstrap behavior, Nessie interactions, health checks, Kafka event handling, and orchestration command construction. CI additionally runs ruff, mypy, a real Airflow DAG parse, and a strict docs build.
 
 ## Platform Outcomes
 

@@ -9,13 +9,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from risk_analytics.spark import create_spark_session
-
 
 ENTITIES = ["customer", "asset", "collateral", "deals"]
 SOURCE_B_PATHS = {
@@ -70,24 +68,28 @@ def run_source_to_ods(python_executable: str, as_of_date: str, source: str, env:
         for key, value in SOURCE_B_PATHS.items():
             source_b_params.extend(["--param", f"{key}={value}"])
 
+    entity_args: list[str] = []
     for entity in ENTITIES:
-        for layer in ("stage", "ods"):
-            run_command(
-                [
-                    python_executable,
-                    step_runner,
-                    "--layer",
-                    layer,
-                    "--entity",
-                    entity,
-                    "--source",
-                    source,
-                    "--as-of-date",
-                    as_of_date,
-                    *source_b_params,
-                ],
-                env,
-            )
+        entity_args.extend(["--entity", entity])
+
+    # One process per layer: every entity shares a Spark session instead of paying
+    # a JVM start per entity.
+    for layer in ("stage", "ods"):
+        run_command(
+            [
+                python_executable,
+                step_runner,
+                "--layer",
+                layer,
+                *entity_args,
+                "--source",
+                source,
+                "--as-of-date",
+                as_of_date,
+                *source_b_params,
+            ],
+            env,
+        )
 
 
 def print_top5_ods() -> dict[str, int]:

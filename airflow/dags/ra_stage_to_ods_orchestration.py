@@ -1,8 +1,12 @@
 """Batch orchestration across the STAGE and ODS namespaces.
 
-For every source/entity pair the matching ``ra_*_stage`` DAG runs to completion
-before its ``ra_*_ods`` counterpart starts, and ``ra_riskmetrics_eval_ods`` runs
-only after all ODS loads finish.
+Each source/entity pair is a task group that runs its ``ra_*_stage`` DAG to
+completion before the matching ``ra_*_ods`` DAG starts; the eight groups run
+concurrently and ``ra_riskmetrics_eval_ods`` runs once every ODS load finishes.
+
+The triggers wait in deferred state (``deferrable=True``), so they hold a triggerer
+slot instead of an executor slot while a child DAG runs; the actual spark-submit
+concurrency is bounded by the ``spark_submit`` pool the leaf DAGs use.
 """
 from __future__ import annotations
 
@@ -11,6 +15,7 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.utils.task_group import TaskGroup
 
 from ra_common import (
     AS_OF_DATE,
@@ -50,22 +55,26 @@ with DAG(
                 "source": source_label,
                 **sourceb_path_conf(),
             }
-            stage_task = TriggerDagRunOperator(
-                task_id=f"trigger_{stage_dag_id(source_label, entity)}",
-                trigger_dag_id=stage_dag_id(source_label, entity),
-                conf=conf,
-                wait_for_completion=True,
-                poke_interval=15,
-            )
-            ods_task = TriggerDagRunOperator(
-                task_id=f"trigger_{ods_dag_id(source_label, entity)}",
-                trigger_dag_id=ods_dag_id(source_label, entity),
-                conf=conf,
-                wait_for_completion=True,
-                poke_interval=15,
-            )
-            start.set_downstream(stage_task)
-            stage_task.set_downstream(ods_task)
-            ods_task.set_downstream(all_loads_completed)
+            with TaskGroup(group_id=f"{source_label}_{entity}") as entity_group:
+                stage_task = TriggerDagRunOperator(
+                    task_id=f"trigger_{stage_dag_id(source_label, entity)}",
+                    trigger_dag_id=stage_dag_id(source_label, entity),
+                    conf=conf,
+                    wait_for_completion=True,
+                    deferrable=True,
+                    poke_interval=15,
+                )
+                ods_task = TriggerDagRunOperator(
+                    task_id=f"trigger_{ods_dag_id(source_label, entity)}",
+                    trigger_dag_id=ods_dag_id(source_label, entity),
+                    conf=conf,
+                    wait_for_completion=True,
+                    deferrable=True,
+                    poke_interval=15,
+                )
+                stage_task.set_downstream(ods_task)
+
+            start.set_downstream(entity_group)
+            entity_group.set_downstream(all_loads_completed)
 
     all_loads_completed >> trigger_risk_metrics

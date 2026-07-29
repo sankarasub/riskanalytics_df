@@ -30,6 +30,13 @@ RISK_METRICS_JOB = "/opt/risk_analytics/jobs/run_risk_pipeline.py"
 
 SPARK_SUBMIT = "env -u SPARK_REMOTE spark-submit --master local[*]"
 
+# Every spark-submit task shares this pool so a wide fan-out cannot start more
+# local JVMs than the Airflow container has memory for. Created by airflow-init.
+SPARK_POOL = "spark_submit"
+
+KAFKA_CONN_ID = "kafka_default"  # configured by airflow-init in docker-compose
+KAFKA_SOURCE = "sourcea"
+
 
 def templated_conf_value(key: str, default: str) -> str:
     """Return a Jinja expression that reads ``key`` from the run conf."""
@@ -47,6 +54,14 @@ def stage_dag_id(source_label: str, entity: str) -> str:
 
 def ods_dag_id(source_label: str, entity: str) -> str:
     return f"ra_{source_label}_{entity}_ods"
+
+
+def kafka_stage_dag_id(entity: str) -> str:
+    return f"ra_kafka_{entity}_stage"
+
+
+def kafka_ods_dag_id(entity: str) -> str:
+    return f"ra_kafka_{entity}_ods"
 
 
 def step_command(layer: str, entity: str, source: str, as_of_date: str = AS_OF_DATE) -> str:

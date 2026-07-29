@@ -116,7 +116,7 @@ flowchart LR
    docker compose ps --all
    ```
 
-   `storage-init` and `airflow-init` should show `Exited (0)`; that is expected because they are one-time initialization tasks. The long-running services should show `Up`, including `spark-master`, `spark-worker`, `spark-connect`, `notebook`, `dremio`, `nessie`, `seaweedfs`, `airflow-webserver`, `airflow-scheduler`, `business-ui`, and `developer-ui`.
+   `storage-init` and `airflow-init` should show `Exited (0)`; that is expected because they are one-time initialization tasks. The long-running services should show `Up`, including `spark-master`, `spark-worker`, `spark-connect`, `notebook`, `dremio`, `nessie`, `seaweedfs`, `airflow-webserver`, `airflow-scheduler`, `airflow-triggerer`, `business-ui`, and `developer-ui`.
 
 ### Load data and run the risk pipeline
 
@@ -155,7 +155,7 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
 4. Or orchestrate through Airflow with DAG order:
 
    1. `ra_createtables_and_data` — creates every table, seeds the Source A/Source B raw tables, then triggers the orchestration below.
-   2. `ra_stage_to_ods_orchestration` — for each entity and source triggers `ra_<source>_<entity>_stage`, waits for it, then `ra_<source>_<entity>_ods`.
+   2. `ra_stage_to_ods_orchestration` — one task group per source/entity triggers `ra_<source>_<entity>_stage`, waits for it, then `ra_<source>_<entity>_ods`. The eight groups run concurrently; the waits are deferred (they need the `airflow-triggerer` service) and the spark-submit tasks share the `spark_submit` Airflow pool, whose slot count is set from `SPARK_SUBMIT_POOL_SLOTS` (default 2).
    3. `ra_riskmetrics_eval_ods` — final risk metric evaluation over ODS, triggered automatically once all ODS loads finish.
 
    The per-entity DAGs can also be triggered on their own:
@@ -164,7 +164,7 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
    | --- | --- | --- |
    | STAGE | `ra_sourceA_customer_stage`, `ra_sourceB_customer_stage`, `ra_sourceA_asset_stage`, `ra_sourceB_asset_stage`, `ra_sourceA_collateral_stage`, `ra_sourceB_collateral_stage`, `ra_sourceA_deals_stage`, `ra_sourceB_deals_stage` | `transform/source_to_ods/stage_<entity>_<source>.yaml` |
    | ODS | `ra_sourceA_customer_ods`, `ra_sourceB_customer_ods`, `ra_sourceA_asset_ods`, `ra_sourceB_asset_ods`, `ra_sourceA_collateral_ods`, `ra_sourceB_collateral_ods`, `ra_sourceA_deals_ods`, `ra_sourceB_deals_ods` | `transform/source_to_ods/ods_<entity>_<source>.yaml` |
-   | Streaming | `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods` | same STAGE/ODS customer YAML files |
+   | Streaming | `ra_kafka_<entity>_stage` -> `ra_kafka_<entity>_ods` -> `ra_riskmetrics_eval_ods` for `customer`, `asset`, `collateral`, and `deals` | same STAGE/ODS YAML files as the batch DAGs |
 
 5. Or run the full platform helper script:
 
@@ -207,7 +207,7 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
 | --- | --- | --- |
 | Business dashboard | http://localhost:8501 | None |
 | Developer control plane | http://localhost:8502 | None |
-| Links portal | http://localhost:8000 | None |
+| Operations API and links portal | http://localhost:8000 | None |
 | Airflow | http://localhost:8088 | `admin` / `admin` |
 | Spark master | http://localhost:8080 | None |
 | JupyterLab notebook | http://localhost:8888 | None (local development only) |
@@ -227,6 +227,7 @@ The Developer UI provides comprehensive platform management and pipeline orchest
 - Start/Stop the complete platform with optional rebuild
 - Auto-refresh service status display
 - View individual service states and ports
+- Probe `GET /health` (API, Spark, Nessie) and list the catalog through `GET /tables`
 
 **Data Pipeline Tab:**
 - **Bootstrap**: Create tables and load seed data via DAG or direct execution
@@ -235,6 +236,7 @@ The Developer UI provides comprehensive platform management and pipeline orchest
   - Configure SourceB file paths
   - Progress tracking for batch execution
 - **Risk Metrics**: Trigger final risk calculations with data model selection
+- **Operations API**: Call `POST /pipeline/execute` for the `bootstrap`, `orchestration`, `stage`, `ods`, and `riskmetrics` targets
 
 **Data Viewer Tab:**
 - View row counts for all lakehouse tables
@@ -242,9 +244,9 @@ The Developer UI provides comprehensive platform management and pipeline orchest
 - Filter by as-of-date
 
 **Airflow Monitoring Tab:**
-- List all available Airflow DAGs
-- Check DAG status and latest run information
-- View recent DAG runs with execution details
+- One table with every `ra_*` DAG joined to its live Airflow state, filterable by layer, source, and entity
+- Warns about DAGs the scheduler has not registered
+- Inspect recent runs for a selected DAG, or trigger it for the chosen as-of date
 - Access risk run history with trend visualization
 
 **Kafka Streaming Tab:**
@@ -269,14 +271,14 @@ The Business UI provides real-time risk metrics and operational monitoring:
 - As-of-date filtering for temporal analysis
 
 **Pipeline Status Tab:**
-- Monitor key DAG execution status
+- Latest run state for every `ra_*` DAG in one table, filtered by layer and source
+- Run-state totals across the selected DAGs
 - Check data freshness across all tables
-- View recent pipeline run states and timestamps
 
 **Streaming Monitor Tab:**
-- Real-time Kafka topic monitoring
-- Entity-level streaming status indicators
-- Topic accessibility checks and statistics
+- Kafka topic listing with partition information
+- Per-entity view of the `ra_kafka_<entity>_stage` and `ra_kafka_<entity>_ods` DAG state next to its ingest topic
+- Topic offset checks
 
 **Historical Runs Tab:**
 - View complete risk calculation history
@@ -285,7 +287,8 @@ The Business UI provides real-time risk metrics and operational monitoring:
 - Average records per run and latest exposure values
 
 **Features:**
-- Auto-refresh capability for real-time monitoring
+- Auto-refresh every 30 seconds for real-time monitoring
+- Sidebar health summary sourced from the operations API `/health` probe
 - Customer filtering for focused analysis
 - Comprehensive error handling and status messages
 
@@ -408,6 +411,21 @@ docker compose down -v
 ```
 
 The default catalog is `nessie`. Stage tables are written beneath `risk_analytics_stage` and standardized ODS tables (including `risk_metrics`) are written beneath `risk_analytics_ods`.
+
+### Development checks
+
+`setup_venv.py` installs `requirements/dev.txt` alongside the runtime groups, so the same gates CI runs are available locally:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -t .
+.\.venv\Scriptsuff.exe check .
+.\.venv\Scripts\mypy.exe --config-file mypy.ini
+$env:PYTHONPATH = (Get-Location).Path; .\.venv\Scripts\python.exe scriptsalidate_dags.py
+mkdocs build --strict
+docker compose config --quiet
+```
+
+`scripts/validate_dags.py` parses `airflow/dags` with a real Airflow `DagBag` and fails on import errors, missing DAG ids, or DAGs without tasks. [.github/workflows/ci.yml](.github/workflows/ci.yml) runs all of the above on every pull request.
 
 ## Safety model
 

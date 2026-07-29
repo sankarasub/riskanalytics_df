@@ -89,7 +89,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 | Interface | One-time setup required? | What to configure once | Where it is configured |
 | --- | --- | --- | --- |
-| Links Portal (FastAPI) | No | None; links are injected from container environment variables | `docker-compose.yml` (`links-api` env block) |
+| Operations API and links portal (FastAPI) | No | None; links are injected from container environment variables | `docker-compose.yml` (`links-api` env block) |
 | Business Dashboard | No | None; reads published ODS tables once platform and pipeline are running | Container runtime (`business-ui`) |
 | Developer Dashboard | No | None; uses existing Airflow/Spark/Nessie endpoints from shared env | Container runtime (`developer-ui`) |
 | Airflow | Yes (first platform bootstrap) | Admin user and Kafka connection are created by init service | `airflow-init` command in `docker-compose.yml` |
@@ -192,21 +192,23 @@ Core DAGs:
 | DAG | Role |
 | --- | --- |
 | `ra_createtables_and_data` | Creates every Iceberg table, seeds the Source A/Source B raw tables, then triggers the orchestration. |
-| `ra_stage_to_ods_orchestration` | For each entity and source triggers the STAGE DAG, waits, triggers the ODS DAG, then triggers risk metrics. |
+| `ra_stage_to_ods_orchestration` | One TaskGroup per source/entity triggers the STAGE DAG, waits, triggers the ODS DAG; the eight groups run concurrently and risk metrics runs once they all finish. |
 | `ra_<source>_<entity>_stage` | Eight DAGs (`ra_sourceA_customer_stage` ... `ra_sourceB_deals_stage`) running `transform/source_to_ods/stage_<entity>_<source>.yaml`. |
 | `ra_<source>_<entity>_ods` | Eight DAGs (`ra_sourceA_customer_ods` ... `ra_sourceB_deals_ods`) running `transform/source_to_ods/ods_<entity>_<source>.yaml`. |
 | `ra_riskmetrics_eval_ods` | Evaluates and publishes risk metrics from ODS data. |
-| `ra_kafka_customer_stage` | Kafka sensor DAG: loads the customer STAGE micro-batch, then triggers `ra_kafka_customer_ods`. |
-| `ra_kafka_customer_ods` | Loads the customer ODS micro-batch, then triggers `ra_riskmetrics_eval_ods`. |
+| `ra_kafka_<entity>_stage` | Four Kafka sensor DAGs (customer, asset, collateral, deals): match their own entity's trigger event, load that STAGE micro-batch, trigger `ra_kafka_<entity>_ods`, then trigger `ra_riskmetrics_eval_ods`. |
+| `ra_kafka_<entity>_ods` | Four DAGs loading the entity ODS micro-batch. They trigger `ra_riskmetrics_eval_ods` only when invoked directly, because the stage DAG owns the trigger in the streaming chain. |
 
 How it is run:
 
-- `airflow-webserver` and `airflow-scheduler` services run continuously.
-- `airflow-init` performs DB migration, user creation, and Kafka connection setup.
+- `airflow-webserver`, `airflow-scheduler`, and `airflow-triggerer` services run continuously. The triggerer is required: the Kafka sensors and the orchestration waits are deferrable.
+- `airflow-init` performs DB migration, user creation, Kafka connection setup, and creates the `spark_submit` pool.
 
 Key configuration:
 
 - `AIRFLOW__CORE__EXECUTOR=LocalExecutor`
+- `AIRFLOW__CORE__PARALLELISM=32` and `AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG=32` so the fan-out is not throttled by the defaults
+- `SPARK_SUBMIT_POOL_SLOTS` (default `2`): slots in the `spark_submit` pool shared by every spark-submit task
 - `SPARK_MASTER_URL=spark://spark-master:7077`
 - `SPARK_REMOTE=sc://spark-connect:15002`
 - `KAFKA_BOOTSTRAP_SERVERS=kafka:9092`
@@ -236,9 +238,10 @@ flowchart TD
   odsA --> join[All stage and ODS loads complete]
   odsB --> join
   join --> risk[ra_riskmetrics_eval_ods]
-  kafka[risk.pipeline.trigger] --> kstage[ra_kafka_customer_stage]
-  kstage --> kods[ra_kafka_customer_ods]
-  kods --> risk
+  kafka[risk.pipeline.trigger] --> kstage["ra_kafka_&lt;entity&gt;_stage"]
+  kstage --> kods["ra_kafka_&lt;entity&gt;_ods"]
+  kods -. "replay only" .-> risk
+  kstage --> risk
   risk --> metrics[Published risk_metrics table]
 ```
 
@@ -359,9 +362,10 @@ flowchart LR
   ingest_collateral --> stream
   stream --> source[Write rows to source contracts]
   source --> trigger[risk.pipeline.trigger]
-  trigger --> listener[ra_kafka_customer_stage]
-  listener --> kods[ra_kafka_customer_ods]
-  kods --> risk[ra_riskmetrics_eval_ods]
+  trigger --> listener["ra_kafka_&lt;entity&gt;_stage"]
+  listener --> kods["ra_kafka_&lt;entity&gt;_ods"]
+  kods -. "replay only" .-> risk[ra_riskmetrics_eval_ods]
+  listener --> risk
   risk --> published[risk.metrics.published]
 ```
 
@@ -380,27 +384,27 @@ Entity ingest consumer:
 - Runtime file: `jobs/kafka_entity_consumer.py`
 - Consumes topics: `risk.deals.ingest`, `risk.customer.ingest`, `risk.asset.ingest`, `risk.collateral.ingest`
 - Writes to source contracts: `nessie.risk_analytics.deals`, `customer`, `asset`, `collateral`
-- Publishes trigger topic: `risk.pipeline.trigger`
+- Publishes trigger topic: `risk.pipeline.trigger`, one event per entity touched by the micro-batch, with `entity`, `as_of_date`, and `source` (payload built by `risk_analytics/kafka_events.py`)
 
-Airflow DAG sequence after trigger:
+Airflow DAG sequence after trigger, for each of `customer`, `asset`, `collateral`, and `deals`:
 
-1. `ra_kafka_customer_stage` waits on `risk.pipeline.trigger` and loads the customer STAGE micro-batch
-2. It triggers `ra_kafka_customer_ods`, which loads the customer ODS micro-batch
-3. `ra_kafka_customer_ods` triggers `ra_riskmetrics_eval_ods` directly, so metrics reflect the micro-batch
+1. `ra_kafka_<entity>_stage` waits on `risk.pipeline.trigger`, ignores events for other entities, and loads that STAGE micro-batch using the `as_of_date` from the event
+2. It triggers `ra_kafka_<entity>_ods` with `trigger_riskmetrics=false` and waits for it
+3. The stage DAG then triggers `ra_riskmetrics_eval_ods`, so metrics reflect the micro-batch
 4. The risk job publishes a summary event to `risk.metrics.published`
 
-Non-customer ingest topics land in the source tables through `kafka-entity-stream`; their STAGE and ODS
-loads run through the batch DAGs (`ra_stage_to_ods_orchestration`), not through the streaming DAGs.
+A Kafka ODS DAG triggered on its own (for a replay) triggers the risk metrics evaluation itself; the
+`check_riskmetrics_trigger_requested` short circuit prevents a duplicate trigger in the streaming chain.
 
 ### Kafka Topic to Table to DAG Matrix
 
 | Kafka topic | Consumer/service | Target table | Trigger topic | Airflow DAG chain |
 | --- | --- | --- | --- | --- |
 | `risk.customer.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.customer` | `risk.pipeline.trigger` | `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods` |
-| `risk.asset.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.asset` | `risk.pipeline.trigger` | Batch DAGs `ra_sourceA_asset_stage` / `ra_sourceA_asset_ods` -> `ra_riskmetrics_eval_ods` |
-| `risk.collateral.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.collateral` | `risk.pipeline.trigger` | Batch DAGs `ra_sourceA_collateral_stage` / `ra_sourceA_collateral_ods` -> `ra_riskmetrics_eval_ods` |
-| `risk.deals.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.deals` | `risk.pipeline.trigger` | Batch DAGs `ra_sourceA_deals_stage` / `ra_sourceA_deals_ods` -> `ra_riskmetrics_eval_ods` |
-| `risk.pipeline.trigger` | `ra_kafka_customer_stage` (Airflow sensor) | XCom payload (`as_of_date`) | N/A | `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.asset.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.asset` | `risk.pipeline.trigger` | `ra_kafka_asset_stage` -> `ra_kafka_asset_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.collateral.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.collateral` | `risk.pipeline.trigger` | `ra_kafka_collateral_stage` -> `ra_kafka_collateral_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.deals.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.deals` | `risk.pipeline.trigger` | `ra_kafka_deals_stage` -> `ra_kafka_deals_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.pipeline.trigger` | `ra_kafka_<entity>_stage` (Airflow sensors) | XCom payload (`entity`, `as_of_date`, `source`) | N/A | `ra_kafka_<entity>_stage` -> `ra_kafka_<entity>_ods` -> `ra_riskmetrics_eval_ods` |
 | `risk.metrics.published` | Downstream consumers / monitoring | Event payload (`as_of_date`, `run_id`, `row_count`) | N/A | Produced by `ra_riskmetrics_eval_ods` completion |
 
 ### Example Kafka Payloads

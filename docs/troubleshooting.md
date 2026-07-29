@@ -110,7 +110,36 @@ docker compose exec airflow-webserver airflow tasks states-for-dag-run ra_riskme
 Restart Airflow services:
 
 ```powershell
-docker compose restart airflow-webserver airflow-scheduler
+docker compose restart airflow-webserver airflow-scheduler airflow-triggerer
+```
+
+### Tasks stay in `deferred` forever
+
+The Kafka sensors and the orchestration waits are deferrable, so they need the triggerer:
+
+```powershell
+docker compose ps airflow-triggerer
+docker compose logs --tail 100 airflow-triggerer
+docker compose up -d airflow-triggerer
+```
+
+### Stage/ODS tasks stay `queued`
+
+Every spark-submit task takes a slot in the `spark_submit` pool, which defaults to 2 slots so the
+Airflow container is not flooded with local Spark drivers. Queued tasks are expected during the
+fan-out; raise the cap only if the host has the memory:
+
+```powershell
+docker compose exec airflow-webserver airflow pools list
+$env:SPARK_SUBMIT_POOL_SLOTS = "4"
+docker compose up -d airflow-init
+```
+
+### Validate DAG parsing without the platform
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+.\.venv\Scripts\python.exe scriptsalidate_dags.py
 ```
 
 ## Spark and Data Troubleshooting
@@ -173,10 +202,10 @@ Pause/resume listener flow:
 
 ```powershell
 docker compose stop kafka-entity-stream
-docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage  # repeat for asset, collateral, deals
 
 docker compose start kafka-entity-stream
-docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage  # repeat for asset, collateral, deals
 ```
 
 ## Cache and Dependency Troubleshooting

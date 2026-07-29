@@ -8,7 +8,7 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
-from ra_common import AS_OF_DATE, DEFAULT_ARGS, bootstrap_command
+from ra_common import AS_OF_DATE, DEFAULT_ARGS, SPARK_POOL, bootstrap_command
 
 SOURCE_TABLES = ("customer", "asset", "collateral", "trades", "trade_product", "deals")
 
@@ -24,6 +24,7 @@ with DAG(
     create_all_tables = BashOperator(
         task_id="create_all_tables",
         bash_command=bootstrap_command("create-all"),
+        pool=SPARK_POOL,
     )
 
     seed_completed = EmptyOperator(task_id="all_source_tables_seeded")
@@ -39,6 +40,7 @@ with DAG(
         seed_task = BashOperator(
             task_id=f"seed_{table_name}_table",
             bash_command=bootstrap_command("seed-table", table_name=table_name),
+            pool=SPARK_POOL,
         )
         create_all_tables >> seed_task >> seed_completed
 

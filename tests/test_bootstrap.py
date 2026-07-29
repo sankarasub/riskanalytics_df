@@ -9,7 +9,7 @@ from tests.support import build_fake_pyspark
 
 
 class FakeTableProbe:
-    def limit(self, _count: int) -> "FakeTableProbe":
+    def limit(self, _count: int) -> FakeTableProbe:
         return self
 
     def count(self) -> int:
@@ -17,7 +17,7 @@ class FakeTableProbe:
 
 
 class FakeWriter:
-    def __init__(self, spark: "FakeSpark", table_name: str) -> None:
+    def __init__(self, spark: FakeSpark, table_name: str) -> None:
         self.spark = spark
         self.table_name = table_name
 
@@ -26,7 +26,7 @@ class FakeWriter:
 
 
 class FakeFrame:
-    def __init__(self, spark: "FakeSpark", rows: list[dict], schema) -> None:
+    def __init__(self, spark: FakeSpark, rows: list[dict], schema) -> None:
         self.spark = spark
         self.rows = rows
         self.schema = schema
