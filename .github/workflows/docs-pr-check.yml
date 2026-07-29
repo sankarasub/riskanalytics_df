@@ -1,0 +1,27 @@
+name: docs-pr-check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  validate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install docs dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs mkdocs-material
+
+      - name: Strict docs build
+        run: mkdocs build --strict

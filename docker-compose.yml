@@ -1,0 +1,385 @@
+name: risk-analytics-lakehouse
+
+x-airflow-common: &airflow-common
+  image: risk-analytics/airflow:2.10.5
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/risk_analytics/airflow/dags
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'false'
+    PYTHONPATH: /opt/risk_analytics
+    SPARK_MASTER_URL: spark://spark-master:7077
+    NESSIE_URI: http://nessie:19120/api/v2
+    S3_ENDPOINT: http://seaweedfs:8333
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-risk_analytics_admin}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-risk_analytics_local_development_secret}
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  volumes:
+    - ./:/opt/risk_analytics
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.99
+    command:
+      - server
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -dir=/data
+      - -ip=seaweedfs
+    ports: ["8333:8333", "9333:9333"]
+    volumes:
+      - seaweed-data:/data
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+
+  storage-init:
+    image: amazon/aws-cli:2.22.35
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-risk_analytics_admin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-risk_analytics_local_development_secret}
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until aws --endpoint-url http://seaweedfs:8333 s3 ls s3://risk-analytics-lakehouse >/dev/null 2>&1;
+        do aws --endpoint-url http://seaweedfs:8333 s3 mb s3://risk-analytics-lakehouse >/dev/null 2>&1 || true;
+        sleep 2; done
+    depends_on: [seaweedfs]
+
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.104.3
+    environment:
+      QUARKUS_HTTP_PORT: 19120
+      NESSIE_VERSION_STORE_TYPE: IN_MEMORY
+    ports: ["19120:19120"]
+
+  spark-master:
+    image: risk-analytics/spark:4.1.3
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    environment:
+      SPARK_MODE: master
+      SPARK_MASTER_HOST: spark-master
+      SPARK_LOCAL_HOSTNAME: spark-master
+      SPARK_PUBLIC_DNS: spark-master
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-risk_analytics_admin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-risk_analytics_local_development_secret}
+      PYTHONPATH: /opt/risk_analytics
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    ports: ["7077:7077", "8080:8080"]
+    volumes:
+      - ./:/opt/risk_analytics
+      - spark-ivy-cache:/opt/spark/.ivy2
+    depends_on:
+      nessie:
+        condition: service_started
+      storage-init:
+        condition: service_completed_successfully
+
+  spark-worker:
+    image: risk-analytics/spark:4.1.3
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_LOCAL_HOSTNAME: spark-worker
+      SPARK_PUBLIC_DNS: spark-worker
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2g
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-risk_analytics_admin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-risk_analytics_local_development_secret}
+      PYTHONPATH: /opt/risk_analytics
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --webui-port
+      - "8081"
+    ports: ["8081:8081"]
+    volumes:
+      - ./:/opt/risk_analytics
+      - spark-ivy-cache:/opt/spark/.ivy2
+    depends_on: [spark-master]
+
+  spark-connect:
+    image: risk-analytics/spark:4.1.3
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    command:
+      - bash
+      - -c
+      - >-
+        /opt/spark/sbin/start-connect-server.sh
+        --master spark://spark-master:7077
+        --conf spark.cores.max=1
+        --conf spark.executor.cores=1
+        --conf spark.connect.grpc.binding.port=15002
+        --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        --conf spark.sql.catalog.nessie=org.apache.iceberg.spark.SparkCatalog
+        --conf spark.sql.catalog.nessie.catalog-impl=org.apache.iceberg.nessie.NessieCatalog
+        --conf spark.sql.catalog.nessie.uri=http://nessie:19120/api/v2
+        --conf spark.sql.catalog.nessie.ref=main
+        --conf spark.sql.catalog.nessie.warehouse=s3a://risk-analytics-lakehouse/warehouse
+        --conf spark.sql.catalog.nessie.authentication.type=NONE
+        --conf spark.hadoop.fs.s3a.endpoint=http://seaweedfs:8333
+        --conf spark.hadoop.fs.s3a.access.key=$${AWS_ACCESS_KEY_ID}
+        --conf spark.hadoop.fs.s3a.secret.key=$${AWS_SECRET_ACCESS_KEY}
+        --conf spark.hadoop.fs.s3a.path.style.access=true
+        --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false
+        --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem;
+        tail -f /dev/null
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-risk_analytics_admin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-risk_analytics_local_development_secret}
+    ports: ["15002:15002"]
+    volumes:
+      - ./:/opt/risk_analytics
+      - spark-ivy-cache:/opt/spark/.ivy2
+    depends_on: [spark-master, nessie, storage-init]
+
+  notebook:
+    image: risk-analytics/notebook:3.11.11
+    build:
+      context: .
+      dockerfile: docker/notebook/Dockerfile
+    command: >
+      jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+      --ServerApp.token='' --ServerApp.password=''
+    environment:
+      SPARK_REMOTE: sc://spark-connect:15002
+    ports: ["8888:8888"]
+    volumes: ["./:/opt/risk_analytics"]
+    working_dir: /opt/risk_analytics
+    depends_on: [spark-connect]
+
+  dremio:
+    image: dremio/dremio-oss:26.0.5
+    environment:
+      DREMIO_JAVA_SERVER_EXTRA_OPTS: -Dpaths.dist=file:///opt/dremio/data/dist
+    ports: ["9047:9047", "31010:31010", "45678:45678", "32010:32010"]
+    volumes: ["dremio-data:/opt/dremio/data"]
+    depends_on: [nessie, storage-init]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      retries: 10
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db migrate &&
+      (airflow users create --username $${AIRFLOW_ADMIN_USER:-admin} --password $${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname 'Risk Analytics' --lastname 'Admin' --role Admin --email admin@example.com || true) &&
+      (airflow connections delete kafka_default || true) &&
+      airflow connections add kafka_default --conn-type kafka --conn-extra '{\"bootstrap.servers\": \"kafka:9092\"}'"
+
+  airflow-webserver:
+    <<: *airflow-common
+    environment:
+      <<: *airflow-env
+      SPARK_REMOTE: sc://spark-connect:15002
+    command: webserver
+    ports: ["8088:8080"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    environment:
+      <<: *airflow-env
+      SPARK_REMOTE: sc://spark-connect:15002
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  business-ui:
+    image: risk-analytics/ui:3.11.11
+    build:
+      context: .
+      dockerfile: docker/ui/Dockerfile
+    command: streamlit run ui/business_app.py --server.port=8501 --server.address=0.0.0.0
+    environment:
+      <<: *airflow-env
+      SPARK_REMOTE: sc://spark-connect:15002
+    ports: ["8501:8501"]
+    volumes: ["./:/opt/risk_analytics"]
+    working_dir: /opt/risk_analytics
+    depends_on: [nessie, storage-init]
+
+  developer-ui:
+    image: risk-analytics/ui:3.11.11
+    build:
+      context: .
+      dockerfile: docker/ui/Dockerfile
+    command: streamlit run ui/developer_app.py --server.port=8502 --server.address=0.0.0.0
+    environment:
+      <<: *airflow-env
+      SPARK_REMOTE: sc://spark-connect:15002
+    ports: ["8502:8502"]
+    volumes: ["./:/opt/risk_analytics"]
+    working_dir: /opt/risk_analytics
+    depends_on: [nessie, storage-init]
+
+  links-api:
+    image: risk-analytics/ui:3.11.11
+    build:
+      context: .
+      dockerfile: docker/ui/Dockerfile
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000
+    environment:
+      <<: *airflow-env
+      BUSINESS_UI_URL: http://localhost:8501
+      DEVELOPER_UI_URL: http://localhost:8502
+      NOTEBOOK_URL: http://localhost:8888
+      DREMIO_URL: http://localhost:9047
+      NESSIE_URL: http://localhost:19120/api/v2
+      AIRFLOW_URL: http://localhost:8088
+      KAFKA_UI_URL: http://localhost:8090
+    ports: ["8000:8000"]
+    volumes: ["./:/opt/risk_analytics"]
+    working_dir: /opt/risk_analytics
+    depends_on: [airflow-webserver, business-ui, developer-ui, dremio, notebook, nessie, kafka-ui]
+
+  # ---------------------------------------------------------------------------
+  # Kafka (KRaft — no Zookeeper)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    hostname: kafka
+    ports: ["29092:29092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "set -o pipefail && (kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1 || kafka-broker-api-versions --bootstrap-server kafka:9092 >/dev/null 2>&1)"]
+      interval: 10s
+      retries: 12
+      start_period: 45s
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic risk.deals.ingest --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic risk.customer.ingest --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic risk.asset.ingest --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic risk.collateral.ingest --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic risk.pipeline.trigger --partitions 1 --replication-factor 1 \
+          --config retention.ms=86400000
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic risk.metrics.published --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        echo "Topics created."
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    ports: ["8090:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: risk-analytics
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  kafka-entity-stream:
+    image: risk-analytics/spark:4.1.3
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    command:
+      - bash
+      - -c
+      - >-
+        spark-submit
+        --master $${SPARK_MASTER_URL}
+        --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        --conf spark.sql.catalog.nessie=org.apache.iceberg.spark.SparkCatalog
+        --conf spark.sql.catalog.nessie.catalog-impl=org.apache.iceberg.nessie.NessieCatalog
+        --conf spark.sql.catalog.nessie.uri=http://nessie:19120/api/v2
+        --conf spark.sql.catalog.nessie.ref=main
+        --conf spark.sql.catalog.nessie.warehouse=s3a://risk-analytics-lakehouse/warehouse
+        --conf spark.sql.catalog.nessie.authentication.type=NONE
+        --conf spark.hadoop.fs.s3a.endpoint=http://seaweedfs:8333
+        --conf spark.hadoop.fs.s3a.access.key=$${AWS_ACCESS_KEY_ID}
+        --conf spark.hadoop.fs.s3a.secret.key=$${AWS_SECRET_ACCESS_KEY}
+        --conf spark.hadoop.fs.s3a.path.style.access=true
+        --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false
+        --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+        /opt/risk_analytics/jobs/kafka_entity_consumer.py
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-risk_analytics_admin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-risk_analytics_local_development_secret}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PYTHONPATH: /opt/risk_analytics
+    volumes:
+      - ./:/opt/risk_analytics
+      - spark-ivy-cache:/opt/spark/.ivy2
+    depends_on:
+      spark-master:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+      nessie:
+        condition: service_started
+      storage-init:
+        condition: service_completed_successfully
+
+volumes:
+  seaweed-data:
+  postgres-data:
+  dremio-data:
+  spark-ivy-cache:
+  kafka-data:
+

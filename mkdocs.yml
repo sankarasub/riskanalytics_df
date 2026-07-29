@@ -1,0 +1,48 @@
+site_name: Risk Analytics Lakehouse Docs
+site_description: Documentation site for the Risk Analytics lakehouse project
+site_url: https://sansubrm.github.io/data_factory/
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+plugins:
+  - search
+validation:
+  links:
+    not_found: ignore
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
+nav:
+  - Overview of This Project: index.md
+  - Framework Overview, System Design & Tech Stack: architecture.md
+  - Data Model and Risk Metrics: data-model-risk-metrics.md
+  - Platform Interfaces and Operations: platform-interfaces-and-operations.md
+  - Runbook and Local Execution: runbooks.md
+  - Production Setup: production_setup.md
+  - Testing: testing.md
+  - Repository Map & Configuration Guide: project-reference.md
+  - Metadata-Driven Architecture and YAML Patterns: metadata-driven-architecture.md
+  - Dependency Download, Cache, and Images Guide: dependency-cache-guide.md
+  - Project README: readme.md
+  - Troubleshooting: troubleshooting.md
+

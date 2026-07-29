@@ -1,0 +1,41 @@
+[
+  {
+    "trade_id": "T001",
+    "customer_id": "CP001",
+    "netting_set_id": "NS-APEX",
+    "product_type": "SWAP",
+    "trade_date": "2025-01-02",
+    "maturity_date": "2030-01-02",
+    "currency": "USD",
+    "notional": "10000000",
+    "mark_to_market": "600000",
+    "status": "ACTIVE",
+    "as_of_date": "{{as_of_date}}"
+  },
+  {
+    "trade_id": "T002",
+    "customer_id": "CP001",
+    "netting_set_id": "NS-APEX",
+    "product_type": "SWAP",
+    "trade_date": "2025-02-02",
+    "maturity_date": "2031-02-02",
+    "currency": "USD",
+    "notional": "7000000",
+    "mark_to_market": "-250000",
+    "status": "ACTIVE",
+    "as_of_date": "{{as_of_date}}"
+  },
+  {
+    "trade_id": "T003",
+    "customer_id": "CP002",
+    "netting_set_id": "NS-NOVA",
+    "product_type": "OPTION",
+    "trade_date": "2025-04-10",
+    "maturity_date": "2027-04-10",
+    "currency": "USD",
+    "notional": "3000000",
+    "mark_to_market": "320000",
+    "status": "ACTIVE",
+    "as_of_date": "{{as_of_date}}"
+  }
+]

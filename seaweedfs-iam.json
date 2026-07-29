@@ -1,0 +1,29 @@
+{
+  "sts": {
+    "issuer": "seaweedfs-sts",
+    "signingKey": "dGVzdC1zaWduaW5nLWtleS0zMi1jaGFyYWN0ZXJzLWxvbmc=",
+    "tokenDuration": "1h",
+    "maxSessionLength": "12h"
+  },
+  "policy": {
+    "defaultEffect": "Allow",
+    "storeType": "memory"
+  },
+  "roles": [],
+  "policies": [
+    {
+      "name": "AllowAll",
+      "document": {
+        "version": "2012-10-17",
+        "statement": [
+          {
+            "effect": "Allow",
+            "action": ["s3:*"],
+            "resource": ["*"]
+          }
+        ]
+      }
+    }
+  ],
+  "providers": []
+}

@@ -1,0 +1,63 @@
+version: 1
+name: asset_SourceB_transform
+
+sources:
+  - name: asset_src
+    type: file
+    format: json
+    path: '{{asset_sourceb_path}}'
+
+steps:
+  - id: asset_cast
+    type: reformat
+    input: asset_src
+    operations:
+      - op: add_column
+        name: valuation_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: valuation_date
+      - op: add_column
+        name: market_value
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: market_value
+      - op: add_column
+        name: source_system
+        expression:
+          lit: 'SourceB'
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - asset_id
+      - isin
+      - asset_class
+      - issuer
+      - currency
+      - market_value
+      - valuation_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: asset_prepared
+
+targets:
+  - name: asset_sourceb_stg
+    dataset: asset_prepared
+    table: nessie.risk_analytics.asset_sourceb_stg
+    mode: append
+
+  - name: asset_canonical
+    dataset: asset_prepared
+    table: nessie.risk_analytics.asset_canonical
+    mode: merge
+    keys:
+      - asset_id
+      - valuation_date

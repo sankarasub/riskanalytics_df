@@ -1,0 +1,52 @@
+version: 1
+name: product_SourceA_transform
+
+sources:
+  - name: product_src
+    type: table
+    table: nessie.risk_analytics.trade_product
+
+steps:
+  - id: product_select
+    type: reformat
+    input: product_src
+    operations:
+      - op: add_column
+        name: source_system
+        expression:
+          lit: 'SourceA'
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - trade_id
+      - product_type
+      - underlying_id
+      - pay_leg_currency
+      - receive_leg_currency
+      - fixed_rate
+      - floating_index
+      - strike
+      - option_type
+      - volatility
+      - barrier_level
+      - product_attributes
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: product_prepared
+
+targets:
+  - name: product_sourcea_stg
+    dataset: product_prepared
+    table: nessie.risk_analytics.trade_product_sourcea_stg
+    mode: append
+
+  - name: product_canonical
+    dataset: product_prepared
+    table: nessie.risk_analytics.trade_product_canonical
+    mode: merge
+    keys:
+      - trade_id

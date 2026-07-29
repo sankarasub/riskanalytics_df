@@ -1,0 +1,244 @@
+version: 1
+name: risk_metrics_pipeline
+
+sources:
+  - name: trades
+    type: table
+    table: nessie.risk_analytics.trades_canonical
+    filters:
+      - as_of_date = '{{as_of_date}}'
+      - status = 'ACTIVE'
+
+  - name: products
+    type: table
+    table: nessie.risk_analytics.trade_product_canonical
+    select:
+      - trade_id
+      - volatility
+
+  - name: collateral_raw
+    type: table
+    table: nessie.risk_analytics.collateral_canonical
+    filters:
+      - valuation_date = '{{as_of_date}}'
+
+  - name: assets
+    type: table
+    table: nessie.risk_analytics.asset_canonical
+    select:
+      - asset_id
+      - asset_class
+
+  - name: haircuts
+    type: config_map
+    config_path: risk.collateral_haircuts
+    key_column: asset_class
+    value_column: haircut
+
+steps:
+  - id: join_trades_products
+    type: join
+    input: trades
+    joins:
+      - dataset: products
+        on:
+          - trade_id
+        how: left
+    emit:
+      output: trades_with_products
+
+  - id: trade_reformat
+    type: reformat
+    input: trades_with_products
+    operations:
+      - op: add_column
+        name: trade_exposure
+        expression:
+          op: greatest
+          args:
+            - col: mark_to_market
+            - lit: 0
+      - op: add_column
+        name: volatility_effective
+        expression:
+          op: coalesce
+          args:
+            - col: volatility
+            - config: risk.default_volatility
+    emit:
+      output: trades_prepared
+
+  - id: netting_rollup
+    type: rollup
+    input: trades_prepared
+    group_by:
+      - customer_id
+      - netting_set_id
+    aggregations:
+      - name: gross_exposure
+        op: sum
+        col: trade_exposure
+      - name: mark_to_market_sum
+        op: sum
+        col: mark_to_market
+      - name: volatility
+        op: avg
+        col: volatility_effective
+    emit:
+      output: netted_rollup
+
+  - id: netting_reformat
+    type: reformat
+    input: netted_rollup
+    operations:
+      - op: add_column
+        name: netting_exposure
+        expression:
+          op: greatest
+          args:
+            - col: mark_to_market_sum
+            - lit: 0
+    drop:
+      - mark_to_market_sum
+    emit:
+      output: netted
+
+  - id: collateral_asset_join
+    type: join
+    input: collateral_raw
+    joins:
+      - dataset: assets
+        on:
+          - asset_id
+        how: inner
+    emit:
+      output: collateral_with_asset
+
+  - id: collateral_lookup_haircut
+    type: lookup
+    input: collateral_with_asset
+    lookup: haircuts
+    keys:
+      - left: asset_class
+        right: asset_class
+    values:
+      - right: haircut
+        name: haircut
+    order_by:
+      - column: asset_class
+        desc: false
+    emit:
+      output: collateral_enriched
+
+  - id: collateral_reformat
+    type: reformat
+    input: collateral_enriched
+    operations:
+      - op: add_column
+        name: haircut_effective
+        expression:
+          op: coalesce
+          args:
+            - col: haircut
+            - config: risk.collateral_haircuts.OTHER
+      - op: add_column
+        name: collateral_after_haircut
+        expression:
+          op: mul
+          args:
+            - col: market_value
+            - expression:
+                op: sub
+                args:
+                  - lit: 1
+                  - col: haircut_effective
+    emit:
+      output: collateral_prepared
+
+  - id: collateral_rollup
+    type: rollup
+    input: collateral_prepared
+    group_by:
+      - customer_id
+    aggregations:
+      - name: collateral_value_after_haircut
+        op: sum
+        col: collateral_after_haircut
+    emit:
+      output: collateral_by_customer
+
+  - id: netted_collateral_join
+    type: join
+    input: netted
+    joins:
+      - dataset: collateral_by_customer
+        on:
+          - customer_id
+        how: left
+    emit:
+      output: netted_with_collateral
+
+  - id: final_reformat
+    type: reformat
+    input: netted_with_collateral
+    operations:
+      - op: add_column
+        name: collateral_value_after_haircut
+        expression:
+          op: coalesce
+          args:
+            - col: collateral_value_after_haircut
+            - lit: 0
+      - op: add_column
+        name: pfe
+        expression:
+          op: greatest
+          args:
+            - op: sub
+              args:
+                - op: mul
+                  args:
+                    - col: netting_exposure
+                    - config: risk.pfe_multiplier
+                - col: collateral_value_after_haircut
+            - lit: 0
+      - op: add_column
+        name: var
+        expression:
+          op: mul
+          args:
+            - col: netting_exposure
+            - col: volatility
+            - config: risk.var_confidence_z_score
+    select:
+      - name: risk_run_id
+        expression:
+          lit: '{{risk_run_id}}'
+      - name: as_of_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - lit: '{{as_of_date}}'
+      - customer_id
+      - netting_set_id
+      - gross_exposure
+      - netting_exposure
+      - collateral_value_after_haircut
+      - pfe
+      - var
+      - name: calculation_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+      - name: source_branch
+        expression:
+          lit: '{{source_branch}}'
+    emit:
+      output: risk_metrics
+
+targets:
+  - name: risk_metrics
+    dataset: risk_metrics
+    table: nessie.risk_analytics.risk_metrics
+    mode: append

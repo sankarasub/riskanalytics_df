@@ -1,0 +1,3 @@
+customer_id,customer_name,legal_entity_id,rating,country_code,entity_type,active_flag,as_of_date
+CP010,Zenith Capital,LEI-ZENITH,A,SG,FUND,true,2026-07-18
+CP011,Orion Treasury,LEI-ORION,BBB,US,BANK,true,2026-07-18

@@ -1,0 +1,52 @@
+version: 1
+name: stage_customer_sourceb
+
+sources:
+  - name: customer_src
+    type: file
+    format: csv
+    path: '{{customer_sourceb_path}}'
+    options:
+      header: true
+      inferSchema: true
+
+steps:
+  - id: normalize_customer_sourceb
+    type: reformat
+    input: customer_src
+    operations:
+      - op: add_column
+        name: as_of_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: as_of_date
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceB
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - customer_id
+      - customer_name
+      - legal_entity_id
+      - rating
+      - country_code
+      - entity_type
+      - active_flag
+      - as_of_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: customer_stage
+
+targets:
+  - name: customer_stage_sourceb
+    dataset: customer_stage
+    table: nessie.risk_analytics_stage.customer_stage_sourceb
+    mode: append

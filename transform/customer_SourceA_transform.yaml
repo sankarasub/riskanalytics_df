@@ -1,0 +1,51 @@
+version: 1
+name: customer_SourceA_transform
+
+sources:
+  - name: customer_src
+    type: table
+    table: nessie.risk_analytics.customer
+    filters:
+      - as_of_date = '{{as_of_date}}'
+
+steps:
+  - id: customer_select
+    type: reformat
+    input: customer_src
+    operations:
+      - op: add_column
+        name: source_system
+        expression:
+          lit: 'SourceA'
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - customer_id
+      - customer_name
+      - legal_entity_id
+      - rating
+      - country_code
+      - entity_type
+      - active_flag
+      - as_of_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: customer_prepared
+
+targets:
+  - name: customer_sourcea_stg
+    dataset: customer_prepared
+    table: nessie.risk_analytics.customer_sourcea_stg
+    mode: append
+
+  - name: customer_canonical
+    dataset: customer_prepared
+    table: nessie.risk_analytics.customer_canonical
+    mode: merge
+    keys:
+      - customer_id
+      - as_of_date

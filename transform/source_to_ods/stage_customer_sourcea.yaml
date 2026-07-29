@@ -1,0 +1,43 @@
+version: 1
+name: stage_customer_sourcea
+
+sources:
+  - name: customer_src
+    type: table
+    table: nessie.risk_analytics.customer
+    filters:
+      - as_of_date = '{{as_of_date}}'
+
+steps:
+  - id: normalize_customer_sourcea
+    type: reformat
+    input: customer_src
+    operations:
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceA
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - customer_id
+      - customer_name
+      - legal_entity_id
+      - rating
+      - country_code
+      - entity_type
+      - active_flag
+      - as_of_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: customer_stage
+
+targets:
+  - name: customer_stage_sourcea
+    dataset: customer_stage
+    table: nessie.risk_analytics_stage.customer_stage_sourcea
+    mode: append

@@ -1,0 +1,53 @@
+version: 1
+name: stage_deals_sourcea
+
+sources:
+  - name: deals_src
+    type: table
+    table: nessie.risk_analytics.deals
+    filters:
+      - as_of_date = '{{as_of_date}}'
+
+steps:
+  - id: normalize_deals_sourcea
+    type: reformat
+    input: deals_src
+    operations:
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceA
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - deal_id
+      - trade_id
+      - customer_id
+      - asset_id
+      - collateral_id
+      - netting_set_id
+      - product_type
+      - trade_date
+      - maturity_date
+      - currency
+      - notional
+      - mark_to_market
+      - status
+      - as_of_date
+      - volatility
+      - fixed_rate
+      - strike
+      - option_type
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: deals_stage
+
+targets:
+  - name: deals_stage_sourcea
+    dataset: deals_stage
+    table: nessie.risk_analytics_stage.deals_stage_sourcea
+    mode: append

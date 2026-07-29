@@ -1,0 +1,50 @@
+version: 1
+name: asset_SourceA_transform
+
+sources:
+  - name: asset_src
+    type: table
+    table: nessie.risk_analytics.asset
+    filters:
+      - valuation_date = '{{as_of_date}}'
+
+steps:
+  - id: asset_select
+    type: reformat
+    input: asset_src
+    operations:
+      - op: add_column
+        name: source_system
+        expression:
+          lit: 'SourceA'
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - asset_id
+      - isin
+      - asset_class
+      - issuer
+      - currency
+      - market_value
+      - valuation_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: asset_prepared
+
+targets:
+  - name: asset_sourcea_stg
+    dataset: asset_prepared
+    table: nessie.risk_analytics.asset_sourcea_stg
+    mode: append
+
+  - name: asset_canonical
+    dataset: asset_prepared
+    table: nessie.risk_analytics.asset_canonical
+    mode: merge
+    keys:
+      - asset_id
+      - valuation_date

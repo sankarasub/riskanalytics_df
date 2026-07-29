@@ -1,0 +1,91 @@
+version: 1
+name: trans_SourceB_transform
+
+sources:
+  - name: trans_src
+    type: file
+    format: csv
+    path: '{{trans_sourceb_path}}'
+    options:
+      header: true
+      inferSchema: true
+
+steps:
+  - id: trans_cast
+    type: reformat
+    input: trans_src
+    operations:
+      - op: add_column
+        name: trade_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: trade_date
+      - op: add_column
+        name: maturity_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: maturity_date
+      - op: add_column
+        name: as_of_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: as_of_date
+      - op: add_column
+        name: notional
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: notional
+      - op: add_column
+        name: mark_to_market
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: mark_to_market
+      - op: add_column
+        name: source_system
+        expression:
+          lit: 'SourceB'
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - trade_id
+      - customer_id
+      - netting_set_id
+      - product_type
+      - trade_date
+      - maturity_date
+      - currency
+      - notional
+      - mark_to_market
+      - status
+      - as_of_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: trans_prepared
+
+targets:
+  - name: trans_sourceb_stg
+    dataset: trans_prepared
+    table: nessie.risk_analytics.trades_sourceb_stg
+    mode: append
+
+  - name: trans_canonical
+    dataset: trans_prepared
+    table: nessie.risk_analytics.trades_canonical
+    mode: merge
+    keys:
+      - trade_id
+      - as_of_date

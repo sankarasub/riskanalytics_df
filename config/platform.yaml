@@ -1,0 +1,23 @@
+catalog:
+  name: nessie
+  namespace: risk_analytics
+  stage_namespace: risk_analytics_stage
+  ods_namespace: risk_analytics_ods
+  warehouse: s3a://risk-analytics-lakehouse/warehouse
+  nessie_uri: http://nessie:19120/api/v2
+storage:
+  endpoint: http://seaweedfs:8333
+  bucket: risk-analytics-lakehouse
+risk:
+  pfe_multiplier: 1.25
+  var_confidence_z_score: 2.33
+  default_volatility: 0.15
+  collateral_haircuts:
+    CASH: 0.00
+    GOVERNMENT_BOND: 0.02
+    CORPORATE_BOND: 0.08
+    EQUITY: 0.15
+    OTHER: 0.25
+executor:
+  pipeline_path: transform/risk_metrics_pipeline.yaml
+

@@ -1,0 +1,47 @@
+version: 1
+name: stage_asset_sourcea
+
+sources:
+  - name: asset_src
+    type: table
+    table: nessie.risk_analytics.asset
+    filters:
+      - valuation_date = '{{as_of_date}}'
+
+steps:
+  - id: normalize_asset_sourcea
+    type: reformat
+    input: asset_src
+    operations:
+      - op: add_column
+        name: customer_id
+        expression:
+          lit: null
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceA
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - asset_id
+      - isin
+      - asset_class
+      - issuer
+      - currency
+      - market_value
+      - valuation_date
+      - customer_id
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: asset_stage
+
+targets:
+  - name: asset_stage_sourcea
+    dataset: asset_stage
+    table: nessie.risk_analytics_stage.asset_stage_sourcea
+    mode: append

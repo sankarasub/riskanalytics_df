@@ -1,0 +1,60 @@
+version: 1
+name: stage_asset_sourceb
+
+sources:
+  - name: asset_src
+    type: file
+    format: json
+    path: '{{asset_sourceb_path}}'
+
+steps:
+  - id: normalize_asset_sourceb
+    type: reformat
+    input: asset_src
+    operations:
+      - op: add_column
+        name: valuation_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: valuation_date
+      - op: add_column
+        name: market_value
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: market_value
+      - op: add_column
+        name: customer_id
+        expression:
+          lit: null
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceB
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - asset_id
+      - isin
+      - asset_class
+      - issuer
+      - currency
+      - market_value
+      - valuation_date
+      - customer_id
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: asset_stage
+
+targets:
+  - name: asset_stage_sourceb
+    dataset: asset_stage
+    table: nessie.risk_analytics_stage.asset_stage_sourceb
+    mode: append

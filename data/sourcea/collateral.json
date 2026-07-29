@@ -1,0 +1,24 @@
+[
+  {
+    "collateral_id": "C001",
+    "customer_id": "CP001",
+    "asset_id": "A001",
+    "agreement_id": "CSA-001",
+    "collateral_type": "SECURITIES",
+    "quantity": "1",
+    "market_value": "400000",
+    "currency": "USD",
+    "valuation_date": "{{as_of_date}}"
+  },
+  {
+    "collateral_id": "C002",
+    "customer_id": "CP002",
+    "asset_id": "A002",
+    "agreement_id": "CSA-002",
+    "collateral_type": "SECURITIES",
+    "quantity": "1",
+    "market_value": "150000",
+    "currency": "USD",
+    "valuation_date": "{{as_of_date}}"
+  }
+]

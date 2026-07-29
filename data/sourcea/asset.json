@@ -1,0 +1,20 @@
+[
+  {
+    "asset_id": "A001",
+    "isin": "GB00B03MLX29",
+    "asset_class": "GOVERNMENT_BOND",
+    "issuer": "UK GOV",
+    "currency": "USD",
+    "market_value": "400000",
+    "valuation_date": "{{as_of_date}}"
+  },
+  {
+    "asset_id": "A002",
+    "isin": "US0378331005",
+    "asset_class": "EQUITY",
+    "issuer": "Apple",
+    "currency": "USD",
+    "market_value": "150000",
+    "valuation_date": "{{as_of_date}}"
+  }
+]

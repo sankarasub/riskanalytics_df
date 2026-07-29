@@ -1,0 +1,64 @@
+version: 1
+name: stage_collateral_sourceb
+
+sources:
+  - name: collateral_src
+    type: file
+    format: json
+    path: '{{collateral_sourceb_path}}'
+
+steps:
+  - id: normalize_collateral_sourceb
+    type: reformat
+    input: collateral_src
+    operations:
+      - op: add_column
+        name: valuation_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: valuation_date
+      - op: add_column
+        name: quantity
+        expression:
+          op: cast
+          type: decimal(20,6)
+          args:
+            - col: quantity
+      - op: add_column
+        name: market_value
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: market_value
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceB
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - collateral_id
+      - customer_id
+      - asset_id
+      - agreement_id
+      - collateral_type
+      - quantity
+      - market_value
+      - currency
+      - valuation_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: collateral_stage
+
+targets:
+  - name: collateral_stage_sourceb
+    dataset: collateral_stage
+    table: nessie.risk_analytics_stage.collateral_stage_sourceb
+    mode: append

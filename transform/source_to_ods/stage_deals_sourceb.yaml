@@ -1,0 +1,153 @@
+version: 1
+name: stage_deals_sourceb
+
+sources:
+  - name: trans_src
+    type: file
+    format: csv
+    path: '{{trans_sourceb_path}}'
+    options:
+      header: true
+      inferSchema: true
+
+  - name: product_src
+    type: file
+    format: json
+    path: '{{product_sourceb_path}}'
+
+steps:
+  - id: trans_cast
+    type: reformat
+    input: trans_src
+    operations:
+      - op: add_column
+        name: trade_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: trade_date
+      - op: add_column
+        name: maturity_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: maturity_date
+      - op: add_column
+        name: as_of_date
+        expression:
+          op: cast
+          type: date
+          args:
+            - col: as_of_date
+      - op: add_column
+        name: notional
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: notional
+      - op: add_column
+        name: mark_to_market
+        expression:
+          op: cast
+          type: decimal(20,2)
+          args:
+            - col: mark_to_market
+    emit:
+      output: trans_prepared
+
+  - id: product_cast
+    type: reformat
+    input: product_src
+    operations:
+      - op: add_column
+        name: fixed_rate
+        expression:
+          op: cast
+          type: decimal(12,8)
+          args:
+            - col: fixed_rate
+      - op: add_column
+        name: strike
+        expression:
+          op: cast
+          type: decimal(20,6)
+          args:
+            - col: strike
+      - op: add_column
+        name: volatility
+        expression:
+          op: cast
+          type: decimal(10,6)
+          args:
+            - col: volatility
+    emit:
+      output: product_prepared
+
+  - id: join_deal_sources
+    type: join
+    input: trans_prepared
+    joins:
+      - dataset: product_prepared
+        on:
+          - trade_id
+        how: left
+    emit:
+      output: deals_joined
+
+  - id: normalize_deals_sourceb
+    type: reformat
+    input: deals_joined
+    operations:
+      - op: add_column
+        name: deal_id
+        expression:
+          col: trade_id
+      - op: add_column
+        name: asset_id
+        expression:
+          lit: null
+      - op: add_column
+        name: collateral_id
+        expression:
+          lit: null
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceB
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - deal_id
+      - trade_id
+      - customer_id
+      - asset_id
+      - collateral_id
+      - netting_set_id
+      - product_type
+      - trade_date
+      - maturity_date
+      - currency
+      - notional
+      - mark_to_market
+      - status
+      - as_of_date
+      - volatility
+      - fixed_rate
+      - strike
+      - option_type
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: deals_stage
+
+targets:
+  - name: deals_stage_sourceb
+    dataset: deals_stage
+    table: nessie.risk_analytics_stage.deals_stage_sourceb
+    mode: append

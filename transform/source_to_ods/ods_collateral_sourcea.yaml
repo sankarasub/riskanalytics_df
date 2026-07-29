@@ -1,0 +1,25 @@
+version: 1
+name: ods_collateral_sourcea
+
+sources:
+  - name: collateral_stage
+    type: table
+    table: nessie.risk_analytics_stage.collateral_stage_sourcea
+    filters:
+      - valuation_date = '{{as_of_date}}'
+
+steps:
+  - id: passthrough_collateral_sourcea
+    type: reformat
+    input: collateral_stage
+    emit:
+      output: collateral_ods
+
+targets:
+  - name: ods_collateral
+    dataset: collateral_ods
+    table: nessie.risk_analytics_ods.collateral
+    mode: merge
+    keys:
+      - collateral_id
+      - valuation_date

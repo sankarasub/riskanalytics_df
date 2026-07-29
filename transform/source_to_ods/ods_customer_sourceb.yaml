@@ -1,0 +1,25 @@
+version: 1
+name: ods_customer_sourceb
+
+sources:
+  - name: customer_stage
+    type: table
+    table: nessie.risk_analytics_stage.customer_stage_sourceb
+    filters:
+      - as_of_date = '{{as_of_date}}'
+
+steps:
+  - id: passthrough_customer_sourceb
+    type: reformat
+    input: customer_stage
+    emit:
+      output: customer_ods
+
+targets:
+  - name: ods_customer
+    dataset: customer_ods
+    table: nessie.risk_analytics_ods.customer
+    mode: merge
+    keys:
+      - customer_id
+      - as_of_date

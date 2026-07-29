@@ -1,0 +1,50 @@
+[
+  {
+    "trade_id": "T001",
+    "product_type": "SWAP",
+    "underlying_id": "USD-SOFR",
+    "pay_leg_currency": "USD",
+    "receive_leg_currency": "USD",
+    "fixed_rate": "0.035",
+    "floating_index": "SOFR",
+    "strike": null,
+    "option_type": null,
+    "volatility": "0.10",
+    "barrier_level": null,
+    "product_attributes": {
+      "tenor": "5Y"
+    }
+  },
+  {
+    "trade_id": "T002",
+    "product_type": "SWAP",
+    "underlying_id": "USD-SOFR",
+    "pay_leg_currency": "USD",
+    "receive_leg_currency": "USD",
+    "fixed_rate": "0.040",
+    "floating_index": "SOFR",
+    "strike": null,
+    "option_type": null,
+    "volatility": "0.10",
+    "barrier_level": null,
+    "product_attributes": {
+      "tenor": "6Y"
+    }
+  },
+  {
+    "trade_id": "T003",
+    "product_type": "OPTION",
+    "underlying_id": "SPX",
+    "pay_leg_currency": null,
+    "receive_leg_currency": null,
+    "fixed_rate": null,
+    "floating_index": null,
+    "strike": "5000",
+    "option_type": "CALL",
+    "volatility": "0.25",
+    "barrier_level": null,
+    "product_attributes": {
+      "style": "EUROPEAN"
+    }
+  }
+]

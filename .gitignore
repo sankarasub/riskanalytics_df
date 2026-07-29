@@ -1,0 +1,60 @@
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# MkDocs build output
+site/
+
+# Docker volumes / local data (never commit these)
+dremio-data/
+postgres-data/
+seaweed-data/
+spark-ivy-cache/
+
+# Environment / secrets
+.env
+*.env.local
+*.env.*.local
+
+# Spark logs
+derby.log
+metastore_db/
+spark-warehouse/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VS Code workspace state (keep tasks.json and settings.json in source control)
+.vscode/launch.json
+.vscode/*.code-snippets
+
+# PyCharm / IntelliJ
+.idea/
+
+# Bytecode cache in airflow dags folder
+airflow/dags/__pycache__/
+
+# Compiled distribution artefacts
+*.whl
+*.tar.gz

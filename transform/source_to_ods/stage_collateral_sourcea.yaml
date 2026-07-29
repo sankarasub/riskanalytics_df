@@ -1,0 +1,44 @@
+version: 1
+name: stage_collateral_sourcea
+
+sources:
+  - name: collateral_src
+    type: table
+    table: nessie.risk_analytics.collateral
+    filters:
+      - valuation_date = '{{as_of_date}}'
+
+steps:
+  - id: normalize_collateral_sourcea
+    type: reformat
+    input: collateral_src
+    operations:
+      - op: add_column
+        name: source_system
+        expression:
+          lit: SourceA
+      - op: add_column
+        name: ingest_timestamp
+        expression:
+          op: current_timestamp
+          args: []
+    select:
+      - collateral_id
+      - customer_id
+      - asset_id
+      - agreement_id
+      - collateral_type
+      - quantity
+      - market_value
+      - currency
+      - valuation_date
+      - source_system
+      - ingest_timestamp
+    emit:
+      output: collateral_stage
+
+targets:
+  - name: collateral_stage_sourcea
+    dataset: collateral_stage
+    table: nessie.risk_analytics_stage.collateral_stage_sourcea
+    mode: append

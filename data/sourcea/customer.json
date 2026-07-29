@@ -1,0 +1,22 @@
+[
+  {
+    "customer_id": "CP001",
+    "customer_name": "Apex Bank",
+    "legal_entity_id": "LEI-APEX",
+    "rating": "A",
+    "country_code": "GB",
+    "entity_type": "BANK",
+    "active_flag": true,
+    "as_of_date": "{{as_of_date}}"
+  },
+  {
+    "customer_id": "CP002",
+    "customer_name": "Nova Asset Mgmt",
+    "legal_entity_id": "LEI-NOVA",
+    "rating": "BBB",
+    "country_code": "US",
+    "entity_type": "FUND",
+    "active_flag": true,
+    "as_of_date": "{{as_of_date}}"
+  }
+]

@@ -1,0 +1,25 @@
+version: 1
+name: ods_deals_sourceb
+
+sources:
+  - name: deals_stage
+    type: table
+    table: nessie.risk_analytics_stage.deals_stage_sourceb
+    filters:
+      - as_of_date = '{{as_of_date}}'
+
+steps:
+  - id: passthrough_deals_sourceb
+    type: reformat
+    input: deals_stage
+    emit:
+      output: deals_ods
+
+targets:
+  - name: ods_deals
+    dataset: deals_ods
+    table: nessie.risk_analytics_ods.deals
+    mode: merge
+    keys:
+      - deal_id
+      - as_of_date

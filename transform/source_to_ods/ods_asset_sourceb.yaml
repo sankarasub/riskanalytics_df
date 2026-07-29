@@ -1,0 +1,25 @@
+version: 1
+name: ods_asset_sourceb
+
+sources:
+  - name: asset_stage
+    type: table
+    table: nessie.risk_analytics_stage.asset_stage_sourceb
+    filters:
+      - valuation_date = '{{as_of_date}}'
+
+steps:
+  - id: passthrough_asset_sourceb
+    type: reformat
+    input: asset_stage
+    emit:
+      output: asset_ods
+
+targets:
+  - name: ods_asset
+    dataset: asset_ods
+    table: nessie.risk_analytics_ods.asset
+    mode: merge
+    keys:
+      - asset_id
+      - valuation_date

@@ -1,0 +1,402 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "risk-analytics-restart-spark",
+			"type": "shell",
+			"command": "docker compose up -d --force-recreate spark-master spark-worker spark-connect",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-check-airflow-dags",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags list",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-check-business-ui-data",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_business_ui.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-run-bootstrap-pipeline",
+			"type": "shell",
+			"command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-check-business-ui-data",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_business_ui.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-run-risk-pipeline",
+			"type": "shell",
+			"command": "docker compose exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0,org.apache.hadoop:hadoop-aws:3.4.2 /opt/risk_analytics/jobs/run_risk_pipeline.py --as-of-date 2026-07-18",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-inspect-nessie-ref",
+			"type": "shell",
+			"command": "docker compose exec business-ui python -c \"import requests; u='http://nessie:19120/api/v2'; r=requests.get(f'{u}/trees/main',timeout=10); print(r.status_code); print(r.text[:500])\"",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-inspect-nessie-ref",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_nessie_ref.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-inspect-nessie-ref-v2",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_nessie_ref.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-run-risk-pipeline-v2",
+			"type": "shell",
+			"command": "docker compose exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0,org.apache.hadoop:hadoop-aws:3.4.2 /opt/risk_analytics/jobs/run_risk_pipeline.py --as-of-date 2026-07-18",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-check-business-ui-data-v2",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_business_ui.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-inspect-nessie-endpoints",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_nessie_endpoints.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-inspect-nessie-openapi",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_nessie_openapi.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-run-risk-pipeline-v3",
+			"type": "shell",
+			"command": "docker compose exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0,org.apache.hadoop:hadoop-aws:3.4.2 /opt/risk_analytics/jobs/run_risk_pipeline.py --as-of-date 2026-07-18",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-check-business-ui-data-v3",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/diag_business_ui.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-health-check",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-health-check-iceberg",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py --check-iceberg",
+			"problemMatcher": []
+		},
+		{
+			"label": "risk-analytics-list-dag-runs",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_create_tables_and_load_data"
+		},
+		{
+			"label": "risk-analytics-list-dag-tasks",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks list risk_analytics_create_tables_and_load_data --tree"
+		},
+		{
+			"label": "risk-analytics-check-nessie-main",
+			"type": "shell",
+			"command": "docker compose exec business-ui python -c \"import requests;u='http://nessie:19120/api/v2';r=requests.get(f'{u}/trees/main',timeout=15);print(r.status_code);print(r.text[:800])\""
+		},
+		{
+			"label": "risk-analytics-dag-run-task-states",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_create_tables_and_load_data manual__2026-07-28T10:55:41.256165+00:00"
+		},
+		{
+			"label": "risk-analytics-dag-log-create-all",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks logs risk_analytics_create_tables_and_load_data create_all_tables manual__2026-07-28T10:55:41.256165+00:00"
+		},
+		{
+			"label": "risk-analytics-host-nessie-check",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"try { $r=Invoke-WebRequest -Uri 'http://localhost:19120/api/v2/trees/main' -UseBasicParsing -TimeoutSec 15; Write-Output ('STATUS=' + [int]$r.StatusCode); Write-Output ($r.Content.Substring(0,[Math]::Min(500,$r.Content.Length))) } catch { Write-Output ('ERROR=' + $_.Exception.Message) }\""
+		},
+		{
+			"label": "risk-analytics-scheduler-tail",
+			"type": "shell",
+			"command": "docker compose logs airflow-scheduler --tail 400"
+		},
+		{
+			"label": "risk-analytics-webserver-tail",
+			"type": "shell",
+			"command": "docker compose logs airflow-webserver --tail 250"
+		},
+		{
+			"label": "risk-analytics-nessie-direct-check",
+			"type": "shell",
+			"command": "docker compose exec business-ui python -c \"import requests; u='http://nessie:19120/api/v2'; r=requests.get(u + '/trees/main', timeout=15); print(r.status_code); print(r.text[:800])\""
+		},
+		{
+			"label": "risk-analytics-host-nessie-http",
+			"type": "shell",
+			"command": "$r = Invoke-WebRequest -Uri 'http://localhost:19120/api/v2/trees/main' -UseBasicParsing -TimeoutSec 15; Write-Output ([int]$r.StatusCode); Write-Output ($r.Content.Substring(0,[Math]::Min(500,$r.Content.Length)))"
+		},
+		{
+			"label": "risk-analytics-list-create-all-logfiles",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver sh -lc \"ls -R /opt/airflow/logs/dag_id=risk_analytics_create_tables_and_load_data 2>/dev/null || ls -R /opt/airflow/logs | head -n 200\""
+		},
+		{
+			"label": "risk-analytics-test-create-all-task",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data create_all_tables 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-test-create-all-task-after-fix",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data create_all_tables 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-check-latest-dag-run-state",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_create_tables_and_load_data manual__2026-07-28T11:04:24.370585+00:00"
+		},
+		{
+			"label": "risk-analytics-show-iceberg-tables",
+			"type": "shell",
+			"command": "docker compose exec spark-master /opt/spark/bin/spark-sql --master spark://spark-master:7077 --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.sql.catalog.nessie=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.nessie.catalog-impl=org.apache.iceberg.nessie.NessieCatalog --conf spark.sql.catalog.nessie.uri=http://nessie:19120/api/v2 --conf spark.sql.catalog.nessie.ref=main --conf spark.sql.catalog.nessie.warehouse=s3a://risk-analytics-lakehouse/warehouse --conf spark.sql.catalog.nessie.authentication.type=NONE --conf spark.hadoop.fs.s3a.endpoint=http://seaweedfs:8333 --conf spark.hadoop.fs.s3a.access.key=risk_analytics_admin --conf spark.hadoop.fs.s3a.secret.key=risk_analytics_local_development_secret --conf spark.hadoop.fs.s3a.path.style.access=true --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem -e \"SHOW TABLES IN nessie.risk_analytics\""
+		},
+		{
+			"label": "risk-analytics-list-dag-runs-after-fix",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_create_tables_and_load_data"
+		},
+		{
+			"label": "risk-analytics-check-latest-dag-run-state-2",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_create_tables_and_load_data manual__2026-07-28T11:04:24.370585+00:00"
+		},
+		{
+			"label": "risk-analytics-test-seed-customer-task",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data seed_customer_table 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-check-airflow-python-version",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver python --version"
+		},
+		{
+			"label": "risk-analytics-check-spark-worker-python-version",
+			"type": "shell",
+			"command": "docker compose exec spark-worker python3 --version"
+		},
+		{
+			"label": "risk-analytics-check-airflow-grpc",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver python -c \"import grpc; print(grpc.__version__)\""
+		},
+		{
+			"label": "risk-analytics-check-airflow-grpc-v2",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver python -c 'import grpc; print(grpc.__version__)'"
+		},
+		{
+			"label": "risk-analytics-test-seed-customer-after-dag-fix",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data seed_customer_table 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-rebuild-airflow-services",
+			"type": "shell",
+			"command": "docker compose up -d --build airflow-init airflow-webserver airflow-scheduler"
+		},
+		{
+			"label": "risk-analytics-test-seed-customer-after-rebuild",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data seed_customer_table 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-rebuild-airflow-services-zstd",
+			"type": "shell",
+			"command": "docker compose up -d --build airflow-init airflow-webserver airflow-scheduler"
+		},
+		{
+			"label": "risk-analytics-test-seed-customer-after-zstd",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data seed_customer_table 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-test-seed-customer-local-master",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_create_tables_and_load_data seed_customer_table 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-check-new-dag-run-state",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_create_tables_and_load_data manual__2026-07-28T11:14:57.167627+00:00"
+		},
+		{
+			"label": "risk-analytics-nessie-main-after-fix",
+			"type": "shell",
+			"command": "$r = Invoke-WebRequest -Uri 'http://localhost:19120/api/v2/trees/main' -UseBasicParsing -TimeoutSec 15; Write-Output ([int]$r.StatusCode); Write-Output ($r.Content.Substring(0,[Math]::Min(300,$r.Content.Length)))"
+		},
+		{
+			"label": "risk-analytics-trigger-risk-dag",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags trigger risk_analytics_pipeline --conf '{\"as_of_date\":\"2026-07-18\"}'"
+		},
+		{
+			"label": "risk-analytics-list-risk-dag-runs",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline --no-backfill | tail -n 8"
+		},
+		{
+			"label": "risk-analytics-trigger-risk-dag-no-conf",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags trigger risk_analytics_pipeline"
+		},
+		{
+			"label": "risk-analytics-list-risk-dag-runs-plain",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline --no-backfill"
+		},
+		{
+			"label": "risk-analytics-risk-dag-task-states",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_pipeline manual__2026-07-28T11:20:03+00:00"
+		},
+		{
+			"label": "risk-analytics-test-risk-task",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_pipeline calculate_and_publish_risk 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-test-config",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver python -m pytest tests/test_config.py -q"
+		},
+		{
+			"label": "risk-analytics-test-risk-task-after-fix",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_pipeline calculate_and_publish_risk 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-debug-join-spec",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver python -c \"import yaml; from pathlib import Path; from risk_analytics.config import load_config; cfg=load_config(); print(cfg['executor']['pipeline_path']); p=yaml.safe_load(Path(cfg['executor']['pipeline_path']).read_text()); print([(s['id'], s.get('joins')) for s in p['steps'] if s['type']=='join'])\""
+		},
+		{
+			"label": "risk-analytics-check-risk-pipeline-env",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver printenv RISK_PIPELINE_YAML"
+		},
+		{
+			"label": "risk-analytics-cat-container-risk-pipeline-yaml",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver sed -n '1,260p' /opt/risk_analytics/transform/risk_metrics_pipeline.yaml"
+		},
+		{
+			"label": "risk-analytics-test-risk-task-after-join-fix",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_pipeline calculate_and_publish_risk 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-test-risk-task-after-join-fix-retry",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_pipeline calculate_and_publish_risk 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-test-risk-task-after-lookup-fix",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_pipeline calculate_and_publish_risk 2026-07-28"
+		},
+		{
+			"label": "risk-analytics-test-risk-task-2026-07-18",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks test risk_analytics_pipeline calculate_and_publish_risk 2026-07-18"
+		},
+		{
+			"label": "risk-analytics-trigger-risk-dag-20260718",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow dags trigger risk_analytics_pipeline -e 2026-07-18T00:00:00+00:00 --run-id verify_20260718_1126"
+		},
+		{
+			"label": "risk-analytics-check-risk-dag-verify-run",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_pipeline verify_20260718_1126"
+		},
+		{
+			"label": "risk-analytics-check-risk-dag-verify-run-final",
+			"type": "shell",
+			"command": "docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_pipeline verify_20260718_1126"
+		},
+		{
+			"label": "risk-analytics-ui-diagnose-services",
+			"type": "shell",
+			"command": "docker compose ps --all"
+		},
+		{
+			"label": "risk-analytics-health-check-corrected",
+			"type": "shell",
+			"command": "docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py --host host.docker.internal --postgres-host postgres --check-iceberg"
+		},
+		{
+			"label": "risk-analytics-logs-developer-ui",
+			"type": "shell",
+			"command": "docker compose logs --tail 200 developer-ui"
+		},
+		{
+			"label": "risk-analytics-host-ui-endpoints",
+			"type": "shell",
+			"command": "$u=@('http://localhost:8501/_stcore/health','http://localhost:8502/_stcore/health','http://localhost:8000/health'); foreach($x in $u){ try{ $r=Invoke-WebRequest -Uri $x -UseBasicParsing -TimeoutSec 8; Write-Output \"$x -> $($r.StatusCode)\" } catch { Write-Output \"$x -> ERROR: $($_.Exception.Message)\" } }"
+		},
+		{
+			"label": "risk-analytics-inspect-developer-ui-state",
+			"type": "shell",
+			"command": "docker inspect risk-analytics-lakehouse-developer-ui-1 --format \"State={{json .State}}\""
+		},
+		{
+			"label": "risk-analytics-restart-developer-ui",
+			"type": "shell",
+			"command": "docker compose up -d developer-ui; docker compose ps developer-ui"
+		},
+		{
+			"label": "risk-analytics-verify-developer-ui-after-restart",
+			"type": "shell",
+			"command": "try { $r=Invoke-WebRequest -Uri 'http://localhost:8502/_stcore/health' -UseBasicParsing -TimeoutSec 10; Write-Output $r.StatusCode } catch { Write-Output $_.Exception.Message }; docker compose ps developer-ui; docker compose logs --tail 80 developer-ui"
+		},
+		{
+			"label": "risk-analytics-ui-data-count-check",
+			"type": "shell",
+			"command": "docker compose exec business-ui python -c \"from risk_analytics.spark import create_spark_session; s=create_spark_session('ui-data-check'); print('risk_metrics_rows=', s.sql('SELECT COUNT(*) c FROM nessie.risk_analytics.risk_metrics').collect()[0]['c']); print('customer_canonical_rows=', s.sql('SELECT COUNT(*) c FROM nessie.risk_analytics.customer_canonical').collect()[0]['c']); print('latest_asof=', s.sql('SELECT MAX(as_of_date) d FROM nessie.risk_analytics.risk_metrics').collect()[0]['d']); s.stop()\""
+		},
+		{
+			"label": "risk-analytics-ui-data-counts-spark-sql",
+			"type": "shell",
+			"command": "docker compose exec spark-master /opt/spark/bin/spark-sql --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0,org.apache.hadoop:hadoop-aws:3.4.2 -e \"SELECT 'risk_metrics' AS table_name, COUNT(*) AS row_count FROM nessie.risk_analytics.risk_metrics UNION ALL SELECT 'customer_canonical' AS table_name, COUNT(*) AS row_count FROM nessie.risk_analytics.customer_canonical\""
+		},
+		{
+			"label": "risk-analytics-ui-data-counts-spark-sql-retry",
+			"type": "shell",
+			"command": "docker compose exec spark-master /opt/spark/bin/spark-sql --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0,org.apache.hadoop:hadoop-aws:3.4.2 -e \"SELECT COUNT(1) AS risk_metrics_rows FROM nessie.risk_analytics.risk_metrics; SELECT COUNT(1) AS customer_canonical_rows FROM nessie.risk_analytics.customer_canonical; SELECT MAX(as_of_date) AS latest_asof FROM nessie.risk_analytics.risk_metrics\""
+		},
+		{
+			"label": "risk-analytics-logs-business-ui",
+			"type": "shell",
+			"command": "docker compose logs --tail 120 business-ui"
+		}
+	]
+}
