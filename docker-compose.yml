@@ -40,7 +40,7 @@ services:
     ports: ["8333:8333", "9333:9333"]
     volumes:
       - seaweed-data:/data
-      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
 
   storage-init:
     image: amazon/aws-cli:2.22.35
@@ -225,6 +225,8 @@ services:
     environment:
       <<: *airflow-env
       SPARK_REMOTE: sc://spark-connect:15002
+      NESSIE_UI_URL: http://localhost:19120/tree/main
+      PIPELINE_API_URL: http://links-api:8000/api/v1
     ports: ["8501:8501"]
     volumes: ["./:/opt/risk_analytics"]
     working_dir: /opt/risk_analytics
@@ -239,6 +241,8 @@ services:
     environment:
       <<: *airflow-env
       SPARK_REMOTE: sc://spark-connect:15002
+      NESSIE_UI_URL: http://localhost:19120/tree/main
+      PIPELINE_API_URL: http://links-api:8000/api/v1
     ports: ["8502:8502"]
     volumes: ["./:/opt/risk_analytics"]
     working_dir: /opt/risk_analytics
@@ -256,13 +260,14 @@ services:
       DEVELOPER_UI_URL: http://localhost:8502
       NOTEBOOK_URL: http://localhost:8888
       DREMIO_URL: http://localhost:9047
-      NESSIE_URL: http://localhost:19120/api/v2
+      NESSIE_UI_URL: http://localhost:19120/tree/main
       AIRFLOW_URL: http://localhost:8088
       KAFKA_UI_URL: http://localhost:8090
+      SPARK_REMOTE: sc://spark-connect:15002
     ports: ["8000:8000"]
     volumes: ["./:/opt/risk_analytics"]
     working_dir: /opt/risk_analytics
-    depends_on: [airflow-webserver, business-ui, developer-ui, dremio, notebook, nessie, kafka-ui]
+    depends_on: [airflow-webserver, business-ui, developer-ui, dremio, notebook, nessie, kafka-ui, spark-connect]
 
   # ---------------------------------------------------------------------------
   # Kafka (KRaft — no Zookeeper)

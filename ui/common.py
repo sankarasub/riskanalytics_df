@@ -6,6 +6,18 @@ import subprocess
 import requests
 from risk_analytics.spark import create_spark_session
 
+BOOTSTRAP_DAG_ID = "ra_createtables_and_data"
+ORCHESTRATION_DAG_ID = "ra_stage_to_ods_orchestration"
+RISK_METRICS_DAG_ID = "ra_riskmetrics_eval_ods"
+KAFKA_STAGE_DAG_ID = "ra_kafka_customer_stage"
+
+# Compose service name of the FastAPI container.
+DEFAULT_PIPELINE_API_URL = "http://links-api:8000/api/v1"
+
+
+def pipeline_api_url() -> str:
+    return os.getenv("PIPELINE_API_URL", DEFAULT_PIPELINE_API_URL).rstrip("/")
+
 
 def read_risk_metrics():
     """Read the published metrics with customer names for the business dashboard.
@@ -31,6 +43,11 @@ def read_risk_metrics():
         spark.stop()
 
 
+def nessie_ui_url() -> str:
+    """Browser URL for the Nessie catalog UI (distinct from the REST API URI)."""
+    return os.getenv("NESSIE_UI_URL", "http://localhost:19120/tree/main")
+
+
 def nessie_references() -> list[dict]:
     uri = os.getenv("NESSIE_URI", "http://nessie:19120/api/v2")
     response = requests.get(f"{uri.rstrip('/')}/trees", timeout=10)
@@ -49,16 +66,16 @@ def trigger_airflow_dag(dag_id: str, logical_date: str | None = None) -> dict:
 
 
 def list_transform_pipelines() -> list[str]:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
-    response = requests.get(f"{api_url.rstrip('/')}/pipelines", timeout=20)
+    api_url = pipeline_api_url()
+    response = requests.get(f"{api_url}/pipelines", timeout=20)
     response.raise_for_status()
     return response.json().get("pipelines", [])
 
 
 def validate_transform_pipeline(pipeline: str, params: dict) -> dict:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
+    api_url = pipeline_api_url()
     response = requests.post(
-        f"{api_url.rstrip('/')}/pipelines/validate",
+        f"{api_url}/pipelines/validate",
         json={"pipeline": pipeline, "params": params},
         timeout=60,
     )
@@ -67,9 +84,9 @@ def validate_transform_pipeline(pipeline: str, params: dict) -> dict:
 
 
 def preview_transform_pipeline(pipeline: str, params: dict) -> dict:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
+    api_url = pipeline_api_url()
     response = requests.post(
-        f"{api_url.rstrip('/')}/pipelines/preview",
+        f"{api_url}/pipelines/preview",
         json={"pipeline": pipeline, "params": params},
         timeout=60,
     )
@@ -83,9 +100,9 @@ def execute_transform_pipeline(pipeline: str, params: dict, spark_ref: str = "ma
     A transform may submit distributed Spark work, so this intentionally permits
     a longer request window than the lightweight list, preview, and validate calls.
     """
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
+    api_url = pipeline_api_url()
     response = requests.post(
-        f"{api_url.rstrip('/')}/pipelines/execute",
+        f"{api_url}/pipelines/execute",
         json={"pipeline": pipeline, "params": params, "spark_ref": spark_ref},
         timeout=3600,
     )
@@ -94,16 +111,16 @@ def execute_transform_pipeline(pipeline: str, params: dict, spark_ref: str = "ma
 
 
 def load_pipeline_yaml_text(pipeline: str) -> str:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
-    response = requests.get(f"{api_url.rstrip('/')}/pipelines/{pipeline}", timeout=20)
+    api_url = pipeline_api_url()
+    response = requests.get(f"{api_url}/pipelines/{pipeline}", timeout=20)
     response.raise_for_status()
     return response.json().get("content", "")
 
 
 def save_pipeline_yaml_text(pipeline: str, content: str) -> None:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
+    api_url = pipeline_api_url()
     response = requests.put(
-        f"{api_url.rstrip('/')}/pipelines/{pipeline}",
+        f"{api_url}/pipelines/{pipeline}",
         json={"content": content},
         timeout=30,
     )
@@ -111,9 +128,9 @@ def save_pipeline_yaml_text(pipeline: str, content: str) -> None:
 
 
 def trigger_source_to_ods(mode: str, entity: str, source: str, as_of_date: str, paths: dict[str, str] | None = None) -> dict:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
+    api_url = pipeline_api_url()
     response = requests.post(
-        f"{api_url.rstrip('/')}/process/source-to-ods/trigger",
+        f"{api_url}/process/source-to-ods/trigger",
         json={
             "mode": mode,
             "entity": entity,
@@ -128,9 +145,9 @@ def trigger_source_to_ods(mode: str, entity: str, source: str, as_of_date: str, 
 
 
 def publish_kafka_event(entity: str, payload: dict, as_of_date: str, trigger_pipeline: bool = False, topic: str | None = None) -> dict:
-    api_url = os.getenv("PIPELINE_API_URL", "http://api:8000/api/v1")
+    api_url = pipeline_api_url()
     response = requests.post(
-        f"{api_url.rstrip('/')}/kafka/publish",
+        f"{api_url}/kafka/publish",
         json={
             "entity": entity,
             "payload": payload,
@@ -423,7 +440,7 @@ def get_risk_run_history(limit: int = 10) -> list[dict]:
 
 def trigger_bootstrap_dag(as_of_date: str) -> dict:
     """Trigger the bootstrap DAG to create tables and load seed data."""
-    return trigger_airflow_dag("risk_analytics_create_tables_and_load_data", f"{as_of_date}T00:00:00Z")
+    return trigger_airflow_dag(BOOTSTRAP_DAG_ID, f"{as_of_date}T00:00:00Z")
 
 
 def trigger_risk_metrics_dag(as_of_date: str, data_model: str = "source-to-ods") -> dict:
@@ -432,7 +449,7 @@ def trigger_risk_metrics_dag(as_of_date: str, data_model: str = "source-to-ods")
     auth = (os.getenv("AIRFLOW_ADMIN_USER", "admin"), os.getenv("AIRFLOW_ADMIN_PASSWORD", "admin"))
     body = {"logical_date": f"{as_of_date}T00:00:00Z", "conf": {"data_model": data_model}}
     response = requests.post(
-        f"{base_url}/dags/risk_analytics_pipeline/dagRuns",
+        f"{base_url}/dags/{RISK_METRICS_DAG_ID}/dagRuns",
         json=body,
         auth=auth,
         timeout=20,

@@ -7,15 +7,16 @@ Use this page as the documentation index for project-level orientation.
 ## Recommended Reading Order
 
 1. [Framework Overview, System Design & Tech Stack](architecture.md)
-2. [Data Model and Risk Metrics](data-model-risk-metrics.md)
-3. [Platform Interfaces and Operations](platform-interfaces-and-operations.md)
-4. [Runbook and Local Execution](runbooks.md)
-5. [Production Setup](production_setup.md)
-6. [Testing](testing.md)
-7. [Repository Map and Configuration Guide](project-reference.md)
-8. [Metadata-Driven Architecture and YAML Patterns](metadata-driven-architecture.md)
-9. [Dependency Download, Cache, and Images Guide](dependency-cache-guide.md)
-10. [Troubleshooting](troubleshooting.md)
+2. [Architecture Diagrams](architecture-diagram.md)
+3. [Data Model and Risk Metrics](data-model-risk-metrics.md)
+4. [Platform Interfaces and Operations](platform-interfaces-and-operations.md)
+5. [Runbook and Local Execution](runbooks.md)
+6. [Production Setup](production_setup.md)
+7. [Testing](testing.md)
+8. [Repository Map and Configuration Guide](project-reference.md)
+9. [Metadata-Driven Architecture and YAML Patterns](metadata-driven-architecture.md)
+10. [Dependency Download, Cache, and Images Guide](dependency-cache-guide.md)
+11. [Troubleshooting](troubleshooting.md)
 
 ## Repository Root README
 

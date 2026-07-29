@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -89,7 +89,7 @@ def main() -> int:
 
     pipeline_path = Path(args.pipeline)
     if not pipeline_path.is_absolute():
-        pipeline_path = Path(__file__).resolve().parent / pipeline_path
+        pipeline_path = REPO_ROOT / pipeline_path
 
     spark = create_spark_session(args.app_name, ref=args.spark_ref)
     try:

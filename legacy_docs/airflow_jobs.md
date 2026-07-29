@@ -4,12 +4,12 @@
 
 | DAG | Responsibility | Downstream dependency |
 | --- | --- | --- |
-| `risk_analytics_create_tables_and_load_data` | Creates the Iceberg namespace and tables, then seeds deterministic source data. | Triggers source transformation orchestration. |
-| `risk_analytics_source_to_ods_orchestration` | Runs stage then ODS loads for customer, asset, collateral, and deals across SourceA/SourceB. | Triggers final risk pipeline with source-to-ODS data model. |
-| `risk_analytics_stage_load` | Executes one parameterized stage load (`entity`, `source`, `as_of_date`). | Returns completion to source-to-ODS orchestration DAG. |
-| `risk_analytics_ods_load` | Executes one parameterized ODS merge (`entity`, `source`, `as_of_date`). | Returns completion to source-to-ODS orchestration DAG. |
-| `risk_analytics_pipeline` | Runs the branch-safe final risk calculation and publishes `risk_metrics`. | Emits completion event when Kafka is configured. |
-| `risk_analytics_kafka_listener` | Listens for pipeline-trigger messages from Kafka and starts the orchestration flow. | Starts source-to-ODS orchestration. |
+| `ra_createtables_and_data` | Creates the Iceberg namespace and tables, then seeds deterministic source data. | Triggers source transformation orchestration. |
+| `ra_stage_to_ods_orchestration` | Runs stage then ODS loads for customer, asset, collateral, and deals across SourceA/SourceB. | Triggers final risk pipeline with source-to-ODS data model. |
+| `ra_sourceA_customer_stage` | Executes one parameterized stage load (`entity`, `source`, `as_of_date`). | Returns completion to source-to-ODS orchestration DAG. |
+| `ra_sourceA_customer_ods` | Executes one parameterized ODS merge (`entity`, `source`, `as_of_date`). | Returns completion to source-to-ODS orchestration DAG. |
+| `ra_riskmetrics_eval_ods` | Runs the branch-safe final risk calculation and publishes `risk_metrics`. | Emits completion event when Kafka is configured. |
+| `ra_kafka_customer_stage` | Listens for pipeline-trigger messages from Kafka and starts the orchestration flow. | Starts source-to-ODS orchestration. |
 
 ## Dependency Flow
 
@@ -32,7 +32,7 @@ flowchart TD
 Use the Developer UI to trigger source-to-ODS orchestration for a selected as-of date, or use Airflow directly:
 
 1. Open [Airflow](http://localhost:8088) and sign in with the credentials from `.env`.
-2. Select `risk_analytics_create_tables_and_load_data` for a complete seeded run, or `risk_analytics_source_to_ods_orchestration` when source data already exists.
+2. Select `ra_createtables_and_data` for a complete seeded run, or `ra_stage_to_ods_orchestration` when source data already exists.
 3. Select **Trigger DAG**, provide `{"as_of_date": "2026-07-18"}` as configuration, and confirm.
 4. Follow the run graph through all source transforms to the final risk calculation.
 

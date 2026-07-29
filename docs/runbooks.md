@@ -58,16 +58,27 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 DAG order:
 
-1. `risk_analytics_create_tables_and_load_data`
-2. `risk_analytics_source_to_ods_orchestration`
-3. `risk_analytics_pipeline`
+1. `ra_createtables_and_data` (creates tables, seeds sources, then triggers step 2)
+2. `ra_stage_to_ods_orchestration` (triggers `ra_<source>_<entity>_stage` then `ra_<source>_<entity>_ods` per entity)
+3. `ra_riskmetrics_eval_ods` (triggered automatically once every ODS load completes)
+
+Unpause the leaf DAGs once so the orchestration can trigger them:
+
+```powershell
+foreach ($source in @('sourceA', 'sourceB')) {
+  foreach ($entity in @('customer', 'asset', 'collateral', 'deals')) {
+    docker compose exec airflow-webserver airflow dags unpause "ra_${source}_${entity}_stage"
+    docker compose exec airflow-webserver airflow dags unpause "ra_${source}_${entity}_ods"
+  }
+}
+```
 
 Useful commands:
 
 ```powershell
 docker compose exec airflow-webserver airflow dags list
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline
-docker compose exec airflow-webserver airflow dags trigger risk_analytics_pipeline --conf '{"as_of_date":"2026-07-18"}'
+docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
+docker compose exec airflow-webserver airflow dags trigger ra_riskmetrics_eval_ods --conf '{"as_of_date":"2026-07-18"}'
 ```
 
 ## Local Run Without Airflow
@@ -134,20 +145,20 @@ Invoke-WebRequest http://localhost:8502/_stcore/health -UseBasicParsing
 Continuous services:
 
 - `kafka-entity-stream` service
-- `risk_analytics_kafka_listener` DAG
+- `ra_kafka_customer_stage` DAG (sensor), which triggers `ra_kafka_customer_ods` and then `ra_riskmetrics_eval_ods`
 
 Disable continuous mode:
 
 ```powershell
 docker compose stop kafka-entity-stream
-docker compose exec airflow-webserver airflow dags pause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage
 ```
 
 Enable continuous mode:
 
 ```powershell
 docker compose start kafka-entity-stream
-docker compose exec airflow-webserver airflow dags unpause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
 ```
 
 ### Kafka Run Commands
@@ -203,9 +214,9 @@ p.flush(5)
 Verify DAG chain execution:
 
 ```powershell
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_kafka_listener
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_kafka_entity_orchestration
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline
+docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_ods
+docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
 ```
 
 ## Clean Restart Options

@@ -115,7 +115,8 @@ Primary runtime entry points:
 
 - Scripted end-to-end run: `scripts/run_risk_analytics_pipeline.ps1`
 - Local Python, no Airflow: `scripts/run_local_python_no_airflow.py`
-- DAG-triggered execution: `risk_analytics_create_tables_and_load_data` -> `risk_analytics_source_to_ods_orchestration` -> `risk_analytics_pipeline`
+- DAG-triggered batch execution: `ra_createtables_and_data` -> `ra_stage_to_ods_orchestration` -> (`ra_<source>_<entity>_stage` -> `ra_<source>_<entity>_ods`) -> `ra_riskmetrics_eval_ods`
+- DAG-triggered streaming execution: `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods`
 
 Core execution modules:
 
@@ -149,9 +150,9 @@ Kafka supports near-real-time entity ingestion and trigger signaling for the sou
 1. Entity events arrive on ingest topics (customer, asset, collateral, deals).
 2. Kafka consumers process micro-batches and land rows in source/stage contracts.
 3. Trigger events are published on `risk.pipeline.trigger`.
-4. Airflow listener DAG triggers source-to-ODS orchestration.
-5. Stage outputs are merged into ODS contracts.
-6. Risk pipeline reads ODS entities and publishes `risk_metrics`.
+4. `ra_kafka_customer_stage` (an `AwaitMessageSensor` DAG) consumes the trigger and loads the customer STAGE micro-batch.
+5. It triggers `ra_kafka_customer_ods`, which standardizes the micro-batch into the ODS contract.
+6. `ra_kafka_customer_ods` triggers `ra_riskmetrics_eval_ods`, which reads ODS entities and publishes `risk_metrics`.
 
 This keeps event-driven flow aligned with the same stage -> ODS -> risk model used by batch orchestration.
 

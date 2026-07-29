@@ -9,6 +9,11 @@ from ui.common import (
     get_kafka_topics,
     get_kafka_topic_stats,
     get_table_counts,
+    nessie_ui_url,
+    BOOTSTRAP_DAG_ID,
+    KAFKA_STAGE_DAG_ID,
+    ORCHESTRATION_DAG_ID,
+    RISK_METRICS_DAG_ID,
 )
 
 st.set_page_config(page_title="Risk Analytics Dashboard", layout="wide")
@@ -19,6 +24,7 @@ st.caption("Real-time risk metrics and pipeline monitoring")
 st.sidebar.header("Filters")
 as_of_date = st.sidebar.date_input("As of Date", value=datetime.now().date())
 auto_refresh = st.sidebar.checkbox("Auto-refresh (30s)", value=False)
+st.sidebar.markdown(f"[Nessie catalog UI]({nessie_ui_url()})")
 
 # Main tabs
 tab1, tab2, tab3, tab4 = st.tabs(["Risk Metrics", "Pipeline Status", "Streaming Monitor", "Historical Runs"])
@@ -91,9 +97,10 @@ with tab2:
             try:
                 # Check key DAGs
                 key_dags = [
-                    "risk_analytics_pipeline",
-                    "risk_analytics_source_to_ods_orchestration",
-                    "risk_analytics_create_tables_and_load_data",
+                    RISK_METRICS_DAG_ID,
+                    ORCHESTRATION_DAG_ID,
+                    BOOTSTRAP_DAG_ID,
+                    KAFKA_STAGE_DAG_ID,
                 ]
                 
                 for dag_id in key_dags:
