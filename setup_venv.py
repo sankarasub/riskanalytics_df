@@ -1,5 +1,5 @@
-import os
 import argparse
+import os
 import subprocess
 import sys
 import venv
@@ -17,7 +17,7 @@ def run(cmd: list[str], cwd: Path | None = None, *, env: dict[str, str] | None =
     return subprocess.run(cmd, cwd=str(cwd or ROOT), env=env, text=True, capture_output=True)
 
 
-REQUIREMENTS_FILE_NAMES = ("ui.txt", "notebook.txt", "docs.txt", "airflow.txt", "spark.txt")
+REQUIREMENTS_FILE_NAMES = ("ui.txt", "notebook.txt", "docs.txt", "airflow.txt", "spark.txt", "dev.txt")
 
 # Imports the local (non-Docker) run paths depend on: Spark Connect client,
 # Arrow bridge, gRPC transport, API server, and the dashboards.

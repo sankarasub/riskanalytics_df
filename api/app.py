@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from datetime import date
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
-from fastapi import HTTPException
-from pydantic import BaseModel, Field
-from fastapi.responses import HTMLResponse
 import requests
 import yaml
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from risk_analytics.config import load_config
 from risk_analytics.spark import create_spark_session

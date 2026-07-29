@@ -12,7 +12,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 
-from ra_common import DEFAULT_ARGS, ENTITIES, SOURCE_LABELS, stage_dag_id, step_command
+from ra_common import DEFAULT_ARGS, ENTITIES, SOURCE_LABELS, SPARK_POOL, stage_dag_id, step_command
 
 for source_label, source_key in SOURCE_LABELS.items():
     for entity in ENTITIES:
@@ -31,6 +31,7 @@ for source_label, source_key in SOURCE_LABELS.items():
             load_stage = BashOperator(
                 task_id=f"load_{entity}_stage",
                 bash_command=step_command("stage", entity, source_key),
+                pool=SPARK_POOL,
             )
             finished = EmptyOperator(task_id="stage_load_completed")
 

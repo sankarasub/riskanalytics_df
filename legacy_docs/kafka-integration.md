@@ -37,7 +37,8 @@ flowchart LR
     ingest --> stream[jobs/kafka_trade_consumer.py]
     stream --> iceberg[Write rows to Iceberg via Nessie]
     stream --> trigger[risk.pipeline.trigger]
-    trigger --> listener[Airflow listener DAG]
+    trigger --> listener["ra_kafka_&lt;entity&gt;_stage sensor DAG"]
+    listener --> kods["ra_kafka_&lt;entity&gt;_ods"]
     listener --> pipeline[ra_riskmetrics_eval_ods]
     pipeline --> published[risk.metrics.published]
 ```
@@ -61,7 +62,7 @@ flowchart LR
 
 ## Airflow Listener Setup
 
-The listener DAG depends on `kafka_default` connection.
+The sensor DAGs depend on the `kafka_default` connection and on the `airflow-triggerer` service, because `AwaitMessageSensor` defers while waiting.
 
 Create or verify:
 
@@ -72,7 +73,7 @@ docker compose exec airflow-webserver airflow connections add kafka_default --co
 Unpause listener DAG:
 
 ```powershell
-docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage  # repeat for asset, collateral, deals
 ```
 
 ## Operational Checks
@@ -102,12 +103,12 @@ If you only need deterministic batch runs, you can pause/stop Kafka-driven flow.
 
 ```powershell
 docker compose stop trade-stream
-docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage  # repeat for asset, collateral, deals
 ```
 
 Re-enable when needed:
 
 ```powershell
 docker compose start trade-stream
-docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage  # repeat for asset, collateral, deals
 ```

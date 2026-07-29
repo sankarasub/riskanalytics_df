@@ -145,20 +145,25 @@ Invoke-WebRequest http://localhost:8502/_stcore/health -UseBasicParsing
 Continuous services:
 
 - `kafka-entity-stream` service
-- `ra_kafka_customer_stage` DAG (sensor), which triggers `ra_kafka_customer_ods` and then `ra_riskmetrics_eval_ods`
+- `airflow-triggerer` service, required by the deferrable Kafka sensors
+- `ra_kafka_<entity>_stage` DAGs (sensors) for `customer`, `asset`, `collateral`, and `deals`, each triggering `ra_kafka_<entity>_ods` and then `ra_riskmetrics_eval_ods`
 
 Disable continuous mode:
 
 ```powershell
 docker compose stop kafka-entity-stream
-docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage
+foreach ($entity in "customer", "asset", "collateral", "deals") {
+  docker compose exec airflow-webserver airflow dags pause "ra_kafka_${entity}_stage"
+}
 ```
 
 Enable continuous mode:
 
 ```powershell
 docker compose start kafka-entity-stream
-docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
+foreach ($entity in "customer", "asset", "collateral", "deals") {
+  docker compose exec airflow-webserver airflow dags unpause "ra_kafka_${entity}_stage"
+}
 ```
 
 ### Kafka Run Commands
@@ -166,7 +171,7 @@ docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_sta
 Start only Kafka ingest path components:
 
 ```powershell
-docker compose up -d kafka kafka-init kafka-ui kafka-entity-stream airflow-webserver airflow-scheduler
+docker compose up -d kafka kafka-init kafka-ui kafka-entity-stream airflow-webserver airflow-scheduler airflow-triggerer
 ```
 
 Verify topics:
@@ -217,6 +222,14 @@ Verify DAG chain execution:
 docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_stage
 docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_ods
 docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
+```
+
+Replace `customer` with `asset`, `collateral`, or `deals` to follow the other entity chains.
+
+Check the shared Spark pool if stage/ODS tasks stay queued:
+
+```powershell
+docker compose exec airflow-webserver airflow pools list
 ```
 
 ## Clean Restart Options

@@ -11,15 +11,15 @@ class FakeSparkBuilder:
     configs: list[tuple[str, str]] = field(default_factory=list)
     get_or_create_called: bool = False
 
-    def appName(self, name: str) -> "FakeSparkBuilder":
+    def appName(self, name: str) -> FakeSparkBuilder:
         self.app_name = name
         return self
 
-    def remote(self, url: str) -> "FakeSparkBuilder":
+    def remote(self, url: str) -> FakeSparkBuilder:
         self.remote_url = url
         return self
 
-    def config(self, key: str, value: str) -> "FakeSparkBuilder":
+    def config(self, key: str, value: str) -> FakeSparkBuilder:
         self.configs.append((key, value))
         return self
 
@@ -94,25 +94,72 @@ class FakeTask:
     def __init__(self, **kwargs) -> None:
         self.task_id = kwargs.get("task_id", "")
         self.kwargs = kwargs
-        self.upstream: list["FakeTask"] = []
-        self.downstream: list["FakeTask"] = []
+        self.upstream: list[FakeTask] = []
+        self.downstream: list[FakeTask] = []
         dag = _ACTIVE_DAGS[-1] if _ACTIVE_DAGS else None
         if dag is not None:
             dag.tasks[self.task_id] = self
+        group = _ACTIVE_GROUPS[-1] if _ACTIVE_GROUPS else None
+        if group is not None:
+            group.tasks.append(self)
 
-    def set_downstream(self, other: "FakeTask") -> "FakeTask":
+    def set_downstream(self, other: FakeTask | FakeTaskGroup) -> FakeTask | FakeTaskGroup:
+        if isinstance(other, FakeTaskGroup):
+            other.set_upstream(self)
+            return other
         self.downstream.append(other)
         other.upstream.append(self)
         return other
 
-    def set_upstream(self, other: "FakeTask") -> "FakeTask":
+    def set_upstream(self, other: FakeTask | FakeTaskGroup) -> FakeTask | FakeTaskGroup:
         other.set_downstream(self)
         return other
 
-    def __rshift__(self, other: "FakeTask") -> "FakeTask":
+    def __rshift__(self, other: FakeTask | FakeTaskGroup) -> FakeTask | FakeTaskGroup:
         return self.set_downstream(other)
 
-    def __lshift__(self, other: "FakeTask") -> "FakeTask":
+    def __lshift__(self, other: FakeTask | FakeTaskGroup) -> FakeTask | FakeTaskGroup:
+        return self.set_upstream(other)
+
+
+class FakeTaskGroup:
+    """Task group stand-in that fans dependencies out to its roots and leaves."""
+
+    def __init__(self, **kwargs) -> None:
+        self.group_id = kwargs.get("group_id", "")
+        self.kwargs = kwargs
+        self.tasks: list[FakeTask] = []
+
+    def __enter__(self) -> FakeTaskGroup:
+        _ACTIVE_GROUPS.append(self)
+        return self
+
+    def __exit__(self, *_exc_info) -> bool:
+        _ACTIVE_GROUPS.pop()
+        return False
+
+    @property
+    def roots(self) -> list[FakeTask]:
+        return [task for task in self.tasks if not any(up in self.tasks for up in task.upstream)]
+
+    @property
+    def leaves(self) -> list[FakeTask]:
+        return [task for task in self.tasks if not any(down in self.tasks for down in task.downstream)]
+
+    def set_downstream(self, other: FakeTask) -> FakeTask:
+        for leaf in self.leaves:
+            leaf.set_downstream(other)
+        return other
+
+    def set_upstream(self, other: FakeTask) -> FakeTask:
+        for root in self.roots:
+            other.set_downstream(root)
+        return other
+
+    def __rshift__(self, other: FakeTask) -> FakeTask:
+        return self.set_downstream(other)
+
+    def __lshift__(self, other: FakeTask) -> FakeTask:
         return self.set_upstream(other)
 
 
@@ -124,7 +171,7 @@ class FakeDag:
         self.kwargs = kwargs
         self.tasks: dict[str, FakeTask] = {}
 
-    def __enter__(self) -> "FakeDag":
+    def __enter__(self) -> FakeDag:
         _ACTIVE_DAGS.append(self)
         _COLLECTED_DAGS[self.dag_id] = self
         return self
@@ -135,12 +182,14 @@ class FakeDag:
 
 
 _ACTIVE_DAGS: list[FakeDag] = []
+_ACTIVE_GROUPS: list[FakeTaskGroup] = []
 _COLLECTED_DAGS: dict[str, FakeDag] = {}
 
 
 def build_fake_airflow() -> tuple[dict[str, ModuleType], dict[str, FakeDag]]:
     """Provide importable Airflow stubs plus the registry DAG files write into."""
     _ACTIVE_DAGS.clear()
+    _ACTIVE_GROUPS.clear()
     _COLLECTED_DAGS.clear()
 
     modules: dict[str, ModuleType] = {}
@@ -148,6 +197,10 @@ def build_fake_airflow() -> tuple[dict[str, ModuleType], dict[str, FakeDag]]:
     airflow_module = ModuleType("airflow")
     airflow_module.DAG = FakeDag
     modules["airflow"] = airflow_module
+
+    task_group_module = ModuleType("airflow.utils.task_group")
+    task_group_module.TaskGroup = FakeTaskGroup
+    modules["airflow.utils.task_group"] = task_group_module
 
     for path, names in {
         "airflow.operators.bash": ("BashOperator",),
@@ -162,7 +215,14 @@ def build_fake_airflow() -> tuple[dict[str, ModuleType], dict[str, FakeDag]]:
         modules[path] = module
 
     # Intermediate packages so `import a.b.c` style imports resolve.
-    for package in ("airflow.operators", "airflow.providers", "airflow.providers.apache", "airflow.providers.apache.kafka", "airflow.providers.apache.kafka.sensors"):
+    for package in (
+        "airflow.operators",
+        "airflow.providers",
+        "airflow.providers.apache",
+        "airflow.providers.apache.kafka",
+        "airflow.providers.apache.kafka.sensors",
+        "airflow.utils",
+    ):
         modules.setdefault(package, ModuleType(package))
 
     return modules, _COLLECTED_DAGS

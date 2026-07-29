@@ -4,7 +4,8 @@ from __future__ import annotations
 from functools import reduce
 from typing import Any
 
-from pyspark.sql import DataFrame, functions as F
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 
 from risk_analytics.transformations.common import ComponentExecutionError, config_value, required_str
 

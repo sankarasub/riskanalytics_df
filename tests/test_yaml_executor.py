@@ -49,11 +49,11 @@ class FakeReader:
         self.loaded_path: str | None = None
         self.frame = FakeFrame(columns=["trade_id", "volatility"])
 
-    def format(self, name: str) -> "FakeReader":
+    def format(self, name: str) -> FakeReader:
         self.format_name = name
         return self
 
-    def option(self, key: str, value: str) -> "FakeReader":
+    def option(self, key: str, value: str) -> FakeReader:
         self.options[key] = value
         return self
 

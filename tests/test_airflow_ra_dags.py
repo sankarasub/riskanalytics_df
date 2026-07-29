@@ -43,11 +43,14 @@ class RiskAnalyticsDagTests(unittest.TestCase):
         cls.dags = _load_all_dags()
 
     def test_all_required_dag_ids_are_registered(self) -> None:
-        expected = {"ra_createtables_and_data", "ra_stage_to_ods_orchestration", "ra_riskmetrics_eval_ods", "ra_kafka_customer_stage", "ra_kafka_customer_ods"}
+        expected = {"ra_createtables_and_data", "ra_stage_to_ods_orchestration", "ra_riskmetrics_eval_ods"}
         for source in SOURCE_LABELS:
             for entity in ENTITIES:
                 expected.add(f"ra_{source}_{entity}_stage")
                 expected.add(f"ra_{source}_{entity}_ods")
+        for entity in ENTITIES:
+            expected.add(f"ra_kafka_{entity}_stage")
+            expected.add(f"ra_kafka_{entity}_ods")
 
         self.assertTrue(expected.issubset(set(self.dags)), msg=f"missing: {sorted(expected - set(self.dags))}")
 
@@ -130,13 +133,38 @@ class RiskAnalyticsDagTests(unittest.TestCase):
         self.assertIn("--data-model", command)
         self.assertIn("source-to-ods", command)
 
-    def test_dag_commands_clear_spark_remote_for_spark_submit(self) -> None:
-        for dag_file in sorted(DAGS_DIR.glob("ra_*.py")):
-            content = dag_file.read_text(encoding="utf-8")
-            if "spark-submit" not in content:
-                continue
-            self.assertIn("env -u SPARK_REMOTE", content)
-            self.assertIn("spark-submit --master local[*]", content)
+    def test_spark_submit_tasks_clear_spark_remote_and_share_one_pool(self) -> None:
+        commands = 0
+        for dag in self.dags.values():
+            for task in dag.tasks.values():
+                command = task.kwargs.get("bash_command")
+                if command is None:
+                    continue
+                commands += 1
+                self.assertIn("env -u SPARK_REMOTE spark-submit --master local[*]", command)
+                self.assertEqual(task.kwargs.get("pool"), "spark_submit")
+        self.assertGreater(commands, 0)
+
+    def test_kafka_dags_exist_per_entity_and_filter_their_own_events(self) -> None:
+        for entity in ENTITIES:
+            stage_dag = self.dags[f"ra_kafka_{entity}_stage"]
+            sensor = stage_dag.tasks[f"wait_for_{entity}_event"]
+
+            self.assertEqual(sensor.kwargs["apply_function"], "risk_analytics.kafka_events.match_entity_event")
+            self.assertEqual(sensor.kwargs["apply_function_kwargs"], {"entity": entity})
+            self.assertEqual(sensor.kwargs["topics"], ["risk.pipeline.trigger"])
+
+            trigger_ods = stage_dag.tasks[f"trigger_ra_kafka_{entity}_ods"]
+            self.assertEqual(trigger_ods.kwargs["trigger_dag_id"], f"ra_kafka_{entity}_ods")
+            self.assertIn(stage_dag.tasks["trigger_ra_riskmetrics_eval_ods"], trigger_ods.downstream)
+            self.assertIn(f"--entity {entity}", stage_dag.tasks[f"load_{entity}_stage"].kwargs["bash_command"])
+
+    def test_orchestration_waits_in_deferred_state(self) -> None:
+        dag = self.dags["ra_stage_to_ods_orchestration"]
+        for source in SOURCE_LABELS:
+            for entity in ENTITIES:
+                for task_id in (f"trigger_ra_{source}_{entity}_stage", f"trigger_ra_{source}_{entity}_ods"):
+                    self.assertTrue(dag.tasks[task_id].kwargs["deferrable"], msg=task_id)
 
 
 if __name__ == "__main__":

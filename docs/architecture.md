@@ -43,7 +43,7 @@ flowchart LR
     user[Business users, analysts, engineers]
 
     subgraph interfaces[Interfaces]
-        links[Links Portal :8000]
+        links[Operations API and links portal :8000]
         business[Business Dashboard :8501]
         developer[Developer Dashboard :8502]
         airflow[Airflow :8088]
@@ -116,7 +116,7 @@ Primary runtime entry points:
 - Scripted end-to-end run: `scripts/run_risk_analytics_pipeline.ps1`
 - Local Python, no Airflow: `scripts/run_local_python_no_airflow.py`
 - DAG-triggered batch execution: `ra_createtables_and_data` -> `ra_stage_to_ods_orchestration` -> (`ra_<source>_<entity>_stage` -> `ra_<source>_<entity>_ods`) -> `ra_riskmetrics_eval_ods`
-- DAG-triggered streaming execution: `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods`
+- DAG-triggered streaming execution, per entity: `ra_kafka_<entity>_stage` -> `ra_kafka_<entity>_ods` -> `ra_riskmetrics_eval_ods` for `customer`, `asset`, `collateral`, and `deals`
 
 Core execution modules:
 
@@ -148,11 +148,13 @@ Published output:
 Kafka supports near-real-time entity ingestion and trigger signaling for the source-to-ODS architecture.
 
 1. Entity events arrive on ingest topics (customer, asset, collateral, deals).
-2. Kafka consumers process micro-batches and land rows in source/stage contracts.
-3. Trigger events are published on `risk.pipeline.trigger`.
-4. `ra_kafka_customer_stage` (an `AwaitMessageSensor` DAG) consumes the trigger and loads the customer STAGE micro-batch.
-5. It triggers `ra_kafka_customer_ods`, which standardizes the micro-batch into the ODS contract.
-6. `ra_kafka_customer_ods` triggers `ra_riskmetrics_eval_ods`, which reads ODS entities and publishes `risk_metrics`.
+2. `jobs/kafka_entity_consumer.py` processes micro-batches and lands rows in source/stage contracts.
+3. One trigger event per entity touched by the micro-batch is published on `risk.pipeline.trigger`, carrying `entity`, `as_of_date`, and `source` (see `risk_analytics/kafka_events.py`).
+4. `ra_kafka_<entity>_stage` (an `AwaitMessageSensor` DAG per entity) matches only its own entity's events and loads that STAGE micro-batch.
+5. It triggers `ra_kafka_<entity>_ods`, which standardizes the micro-batch into the ODS contract.
+6. The stage DAG then triggers `ra_riskmetrics_eval_ods`, which reads ODS entities and publishes `risk_metrics`. When a Kafka ODS DAG is triggered on its own, it triggers the metrics evaluation itself.
+
+The sensors defer while waiting, so the `airflow-triggerer` service has to be running.
 
 This keeps event-driven flow aligned with the same stage -> ODS -> risk model used by batch orchestration.
 

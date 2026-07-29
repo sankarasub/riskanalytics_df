@@ -13,7 +13,6 @@ from risk_analytics.nessie import NessieClient
 from risk_analytics.spark import create_spark_session
 from risk_analytics.yaml_executor import run_pipeline_from_yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_MODEL_PIPELINES = {
     "legacy": "transform/risk_metrics_pipeline.yaml",

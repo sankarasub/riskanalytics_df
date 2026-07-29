@@ -3,16 +3,61 @@ from __future__ import annotations
 
 import os
 import subprocess
+
 import requests
+from pyspark.sql import DataFrame
+
 from risk_analytics.spark import create_spark_session
 
 BOOTSTRAP_DAG_ID = "ra_createtables_and_data"
 ORCHESTRATION_DAG_ID = "ra_stage_to_ods_orchestration"
 RISK_METRICS_DAG_ID = "ra_riskmetrics_eval_ods"
-KAFKA_STAGE_DAG_ID = "ra_kafka_customer_stage"
+
+ENTITIES = ("customer", "asset", "collateral", "deals")
+SOURCE_LABELS = ("sourceA", "sourceB")
 
 # Compose service name of the FastAPI container.
 DEFAULT_PIPELINE_API_URL = "http://links-api:8000/api/v1"
+
+
+def stage_dag_id(source: str, entity: str) -> str:
+    return f"ra_{source}_{entity}_stage"
+
+
+def ods_dag_id(source: str, entity: str) -> str:
+    return f"ra_{source}_{entity}_ods"
+
+
+def kafka_stage_dag_id(entity: str) -> str:
+    return f"ra_kafka_{entity}_stage"
+
+
+def kafka_ods_dag_id(entity: str) -> str:
+    return f"ra_kafka_{entity}_ods"
+
+
+def dag_catalog() -> list[dict]:
+    """Describe every Risk Analytics DAG so UIs can group and filter consistently.
+
+    The Airflow REST API only returns ids, so the layer/source/entity facets the
+    dashboards filter on are derived here once instead of parsed in each page.
+    """
+    catalog: list[dict] = [
+        {"dag_id": BOOTSTRAP_DAG_ID, "layer": "bootstrap", "source": "-", "entity": "all"},
+        {"dag_id": ORCHESTRATION_DAG_ID, "layer": "orchestration", "source": "-", "entity": "all"},
+        {"dag_id": RISK_METRICS_DAG_ID, "layer": "riskmetrics", "source": "-", "entity": "all"},
+    ]
+    for source in SOURCE_LABELS:
+        for entity in ENTITIES:
+            catalog.append({"dag_id": stage_dag_id(source, entity), "layer": "stage", "source": source, "entity": entity})
+            catalog.append({"dag_id": ods_dag_id(source, entity), "layer": "ods", "source": source, "entity": entity})
+    for entity in ENTITIES:
+        catalog.append({"dag_id": kafka_stage_dag_id(entity), "layer": "kafka-stage", "source": "kafka", "entity": entity})
+        catalog.append({"dag_id": kafka_ods_dag_id(entity), "layer": "kafka-ods", "source": "kafka", "entity": entity})
+    return catalog
+
+
+DAG_LAYERS = ("bootstrap", "orchestration", "stage", "ods", "kafka-stage", "kafka-ods", "riskmetrics")
 
 
 def pipeline_api_url() -> str:
@@ -172,7 +217,7 @@ def get_docker_platform_status() -> dict:
         )
         if result.returncode != 0:
             return {"status": "error", "message": result.stderr}
-        
+
         import json
         services = json.loads(result.stdout)
         return {
@@ -202,10 +247,10 @@ def start_docker_platform(mode: str = "up") -> dict:
                 text=True,
                 timeout=180,
             )
-        
+
         if result.returncode != 0:
             return {"status": "error", "message": result.stderr}
-        
+
         return {"status": "success", "message": result.stdout}
     except Exception as error:
         return {"status": "error", "message": str(error)}
@@ -220,10 +265,10 @@ def stop_docker_platform() -> dict:
             text=True,
             timeout=60,
         )
-        
+
         if result.returncode != 0:
             return {"status": "error", "message": result.stderr}
-        
+
         return {"status": "success", "message": result.stdout}
     except Exception as error:
         return {"status": "error", "message": str(error)}
@@ -237,7 +282,7 @@ def list_airflow_dags() -> list[dict]:
         response = requests.get(f"{base_url}/dags", auth=auth, timeout=20)
         response.raise_for_status()
         return response.json().get("dags", [])
-    except Exception as error:
+    except Exception:
         return []
 
 
@@ -254,8 +299,75 @@ def get_airflow_dag_runs(dag_id: str, limit: int = 10) -> list[dict]:
         )
         response.raise_for_status()
         return response.json().get("dag_runs", [])
-    except Exception as error:
+    except Exception:
         return []
+
+
+def ops_api_url() -> str:
+    """Base URL of the operations API (``/health``, ``/tables``, ``/pipeline/execute``)."""
+    return os.getenv("OPS_API_URL", "http://links-api:8000").rstrip("/")
+
+
+def get_platform_health() -> dict:
+    """Read the API health probe, which also covers Spark and the Nessie catalog."""
+    try:
+        response = requests.get(f"{ops_api_url()}/health", timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except Exception as error:
+        return {"status": "unreachable", "error": str(error)}
+
+
+def list_catalog_tables() -> dict:
+    """List the Iceberg tables the API can see across the configured namespaces."""
+    try:
+        response = requests.get(f"{ops_api_url()}/tables", timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except Exception as error:
+        return {"error": str(error), "tables": []}
+
+
+def execute_pipeline_target(target: str, as_of_date: str, entity: str | None = None, source: str | None = None) -> dict:
+    """Trigger one of the API's pipeline targets (bootstrap/orchestration/stage/ods/riskmetrics)."""
+    body: dict[str, str] = {"target": target, "as_of_date": as_of_date}
+    if entity:
+        body["entity"] = entity
+    if source:
+        body["source"] = source
+    response = requests.post(f"{ops_api_url()}/pipeline/execute", json=body, timeout=120)
+    if response.status_code >= 400:
+        return {"status": "error", "message": response.text, "http_status": response.status_code}
+    return response.json()
+
+
+def get_dag_overview(layers: tuple[str, ...] | None = None) -> list[dict]:
+    """Join the DAG catalog with Airflow's live state in a single table.
+
+    One ``/dags`` call plus one ``/dagRuns`` call per known DAG keeps the pages
+    responsive while still showing the latest run state next to each DAG.
+    """
+    known = {dag.get("dag_id"): dag for dag in list_airflow_dags()}
+    rows: list[dict] = []
+    for entry in dag_catalog():
+        if layers and entry["layer"] not in layers:
+            continue
+        dag_id = entry["dag_id"]
+        live = known.get(dag_id)
+        runs = get_airflow_dag_runs(dag_id, limit=1) if live else []
+        latest = runs[0] if runs else {}
+        rows.append(
+            {
+                **entry,
+                "registered": live is not None,
+                "paused": bool(live.get("is_paused")) if live else None,
+                "last_run_state": latest.get("state", "-"),
+                "last_run_id": latest.get("dag_run_id", "-"),
+                "last_run_start": latest.get("start_date", "-"),
+                "last_run_end": latest.get("end_date", "-"),
+            }
+        )
+    return rows
 
 
 def get_airflow_dag_status(dag_id: str) -> dict:
@@ -263,16 +375,16 @@ def get_airflow_dag_status(dag_id: str) -> dict:
     try:
         base_url = os.getenv("AIRFLOW_API_URL", "http://airflow-webserver:8080/api/v1")
         auth = (os.getenv("AIRFLOW_ADMIN_USER", "admin"), os.getenv("AIRFLOW_ADMIN_PASSWORD", "admin"))
-        
+
         # Get DAG info
         response = requests.get(f"{base_url}/dags/{dag_id}", auth=auth, timeout=20)
         response.raise_for_status()
         dag_info = response.json()
-        
+
         # Get latest runs
         runs = get_airflow_dag_runs(dag_id, limit=1)
         latest_run = runs[0] if runs else None
-        
+
         return {
             "dag_id": dag_id,
             "is_active": dag_info.get("is_active", False),
@@ -284,12 +396,19 @@ def get_airflow_dag_status(dag_id: str) -> dict:
         return {"dag_id": dag_id, "error": str(error)}
 
 
+def _row_count(frame: DataFrame, as_of_date: str | None) -> int:
+    """Count rows, restricted to a business date when the table carries one."""
+    if as_of_date and "as_of_date" in frame.columns:
+        return frame.filter(frame.as_of_date == as_of_date).count()
+    return frame.count()
+
+
 def get_table_counts(as_of_date: str | None = None) -> dict:
     """Get row counts for all key tables in the lakehouse."""
     spark = create_spark_session("risk-analytics-table-counts")
     try:
         counts = {}
-        
+
         # Try ODS tables first (new data model)
         ods_tables = [
             "nessie.risk_analytics_ods.customer",
@@ -298,15 +417,10 @@ def get_table_counts(as_of_date: str | None = None) -> dict:
             "nessie.risk_analytics_ods.deals",
             "nessie.risk_analytics_ods.risk_metrics",
         ]
-        
+
         for table in ods_tables:
             try:
-                df = spark.table(table)
-                if as_of_date and "as_of_date" in df.columns:
-                    count = df.filter(df.as_of_date == as_of_date).count()
-                else:
-                    count = df.count()
-                counts[table] = count
+                counts[table] = _row_count(spark.table(table), as_of_date)
             except Exception:
                 # Try legacy tables if ODS not available
                 legacy_map = {
@@ -319,15 +433,10 @@ def get_table_counts(as_of_date: str | None = None) -> dict:
                 legacy_table = legacy_map.get(table)
                 if legacy_table:
                     try:
-                        df = spark.table(legacy_table)
-                        if as_of_date and "as_of_date" in df.columns:
-                            count = df.filter(df.as_of_date == as_of_date).count()
-                        else:
-                            count = df.count()
-                        counts[table] = count
+                        counts[table] = _row_count(spark.table(legacy_table), as_of_date)
                     except Exception:
                         counts[table] = 0
-        
+
         return {"status": "success", "counts": counts}
     except Exception as error:
         return {"status": "error", "message": str(error)}
@@ -361,10 +470,10 @@ def get_kafka_topics() -> list:
         response = requests.get(f"{kafka_ui_url}/api/clusters", timeout=10)
         response.raise_for_status()
         clusters = response.json()
-        
+
         if not clusters:
             return []
-        
+
         cluster_id = clusters[0]["id"]
         topics_response = requests.get(
             f"{kafka_ui_url}/api/clusters/{cluster_id}/topics",
@@ -372,7 +481,7 @@ def get_kafka_topics() -> list:
         )
         topics_response.raise_for_status()
         return topics_response.json()
-    except Exception as error:
+    except Exception:
         return []
 
 
@@ -383,10 +492,10 @@ def get_kafka_topic_stats(topic_name: str) -> dict:
         response = requests.get(f"{kafka_ui_url}/api/clusters", timeout=10)
         response.raise_for_status()
         clusters = response.json()
-        
+
         if not clusters:
             return {"error": "No Kafka clusters found"}
-        
+
         cluster_id = clusters[0]["id"]
         topic_response = requests.get(
             f"{kafka_ui_url}/api/clusters/{cluster_id}/topics/{topic_name}",
@@ -406,21 +515,25 @@ def get_risk_run_history(limit: int = 10) -> list[dict]:
             metrics = spark.table("nessie.risk_analytics_ods.risk_metrics")
         except Exception:
             metrics = spark.table("nessie.risk_analytics.risk_metrics")
-        
+
         # Get unique run information
-        run_info = metrics.select(
-            "risk_run_id", "as_of_date", "calculation_timestamp", "source_branch"
-        ).distinct().orderBy("calculation_timestamp", ascending=False).limit(limit).toPandas()
-        
+        run_info = (
+            metrics.select("risk_run_id", "as_of_date", "calculation_timestamp", "source_branch")
+            .distinct()
+            .orderBy("calculation_timestamp", ascending=False)
+            .limit(limit)
+            .collect()
+        )
+
         # Get counts per run
         history = []
-        for _, row in run_info.iterrows():
+        for row in run_info:
             run_id = row["risk_run_id"]
             as_of_date = row["as_of_date"]
             run_metrics = metrics.filter(
                 (metrics.risk_run_id == run_id) & (metrics.as_of_date == as_of_date)
             )
-            
+
             history.append({
                 "risk_run_id": run_id,
                 "as_of_date": str(as_of_date),
@@ -430,9 +543,9 @@ def get_risk_run_history(limit: int = 10) -> list[dict]:
                 "total_pfe": run_metrics.agg({"pfe": "sum"}).collect()[0][0],
                 "total_var": run_metrics.agg({"var": "sum"}).collect()[0][0],
             })
-        
+
         return history
-    except Exception as error:
+    except Exception:
         return []
     finally:
         spark.stop()

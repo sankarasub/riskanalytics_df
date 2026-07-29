@@ -11,7 +11,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 
-from ra_common import DEFAULT_ARGS, ENTITIES, SOURCE_LABELS, ods_dag_id, step_command
+from ra_common import DEFAULT_ARGS, ENTITIES, SOURCE_LABELS, SPARK_POOL, ods_dag_id, step_command
 
 for source_label, source_key in SOURCE_LABELS.items():
     for entity in ENTITIES:
@@ -30,6 +30,7 @@ for source_label, source_key in SOURCE_LABELS.items():
             load_ods = BashOperator(
                 task_id=f"load_{entity}_ods",
                 bash_command=step_command("ods", entity, source_key),
+                pool=SPARK_POOL,
             )
             finished = EmptyOperator(task_id="ods_load_completed")
 

@@ -2,18 +2,17 @@
 from __future__ import annotations
 
 import argparse
+import json
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
-import json
 from pathlib import Path
-from collections import defaultdict
 
 from pyspark.sql.types import BooleanType, DateType, DecimalType, MapType, StringType, StructField, StructType
 
+from jobs.create_tables import TABLE_DDL
 from risk_analytics.config import legacy_table_name, load_config
 from risk_analytics.spark import create_spark_session
-from jobs.create_tables import TABLE_DDL
-
 
 DEFAULT_AS_OF_DATE = date(2026, 7, 18)
 SOURCEA_DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "sourcea"

@@ -10,7 +10,7 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-from ra_common import AS_OF_DATE, DEFAULT_ARGS, risk_metrics_command
+from ra_common import AS_OF_DATE, DEFAULT_ARGS, SPARK_POOL, risk_metrics_command
 
 DATA_MODEL = "{{ dag_run.conf.get('data_model', 'source-to-ods') if dag_run else 'source-to-ods' }}"
 
@@ -27,4 +27,5 @@ with DAG(
     evaluate_risk_metrics = BashOperator(
         task_id="evaluate_and_publish_risk_metrics",
         bash_command=risk_metrics_command(AS_OF_DATE, DATA_MODEL),
+        pool=SPARK_POOL,
     )

@@ -9,7 +9,8 @@
 | `ra_sourceA_customer_stage` | Executes one parameterized stage load (`entity`, `source`, `as_of_date`). | Returns completion to source-to-ODS orchestration DAG. |
 | `ra_sourceA_customer_ods` | Executes one parameterized ODS merge (`entity`, `source`, `as_of_date`). | Returns completion to source-to-ODS orchestration DAG. |
 | `ra_riskmetrics_eval_ods` | Runs the branch-safe final risk calculation and publishes `risk_metrics`. | Emits completion event when Kafka is configured. |
-| `ra_kafka_customer_stage` | Listens for pipeline-trigger messages from Kafka and starts the orchestration flow. | Starts source-to-ODS orchestration. |
+| `ra_kafka_<entity>_ods` | One DAG per entity loading the entity ODS micro-batch. | Triggers `ra_riskmetrics_eval_ods` when run on its own. |
+| `ra_kafka_<entity>_stage` | One sensor DAG per entity (customer, asset, collateral, deals) listening for its own pipeline-trigger messages. | Loads the entity STAGE micro-batch, triggers `ra_kafka_<entity>_ods`, then `ra_riskmetrics_eval_ods`. |
 
 ## Dependency Flow
 
@@ -23,7 +24,7 @@ flowchart TD
     odsA --> join["All stage/ODS loads completed"]
     odsB --> join
     join --> risk["Final risk pipeline"]
-    kafka["Kafka pipeline trigger"] --> listener["Kafka listener DAG"] --> fanout
+    kafka["Kafka pipeline trigger"] --> listener["Kafka entity sensor DAG"] --> kods["Kafka entity ODS DAG"] --> risk
     risk --> metrics["Published Iceberg risk_metrics"]
 ```
 

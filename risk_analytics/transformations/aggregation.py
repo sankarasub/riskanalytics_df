@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pyspark.sql import DataFrame, Window, functions as F
+from pyspark.sql import DataFrame, Window
+from pyspark.sql import functions as F
 
 from risk_analytics.transformations.common import ComponentExecutionError, dataset, required_str
 from risk_analytics.transformations.relational import order_columns
@@ -60,7 +61,7 @@ def run_normalize(datasets: dict[str, DataFrame], step: dict[str, Any], _config:
     if factor_col is not None:
         multiplier = F.coalesce(F.col(str(factor_col)).cast("int"), F.lit(0))
     else:
-        multiplier = F.lit(int(factor_literal)).cast("int")
+        multiplier = F.lit(int(float(str(factor_literal)))).cast("int")
 
     # Spark sequence/explode keeps expansion distributed instead of collecting rows.
     output = source.withColumn("__normalize_n", multiplier)

@@ -5,7 +5,8 @@ from collections.abc import Iterable
 from functools import reduce
 from typing import Any
 
-from pyspark.sql import DataFrame, Window, functions as F
+from pyspark.sql import DataFrame, Window
+from pyspark.sql import functions as F
 
 from risk_analytics.transformations.common import ComponentExecutionError, dataset, required_str
 from risk_analytics.transformations.expressions import apply_select

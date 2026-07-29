@@ -1,7 +1,6 @@
 import sys
-import json
+
 import requests
-from urllib.parse import urljoin
 
 
 def http_get(url, auth=None, timeout=10):

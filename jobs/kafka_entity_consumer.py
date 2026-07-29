@@ -7,17 +7,19 @@ Topics consumed:
 - risk.collateral.ingest
 
 Topic produced:
-- risk.pipeline.trigger (one message per micro-batch that writes rows)
+- risk.pipeline.trigger (one message per entity written in a micro-batch, so each
+  ``ra_kafka_<entity>_stage`` DAG only wakes for its own entity)
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import date
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, DecimalType, StringType, StructField, StructType
+
+from risk_analytics.kafka_events import TRIGGER_TOPIC, build_trigger_payload
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INGEST_TOPICS = [
@@ -26,7 +28,6 @@ INGEST_TOPICS = [
     "risk.asset.ingest",
     "risk.collateral.ingest",
 ]
-TRIGGER_TOPIC = "risk.pipeline.trigger"
 CHECKPOINT_PATH = "/tmp/checkpoints/kafka_entity_stream"
 
 TOPIC_TABLE_MAP = {
@@ -34,6 +35,13 @@ TOPIC_TABLE_MAP = {
     "risk.customer.ingest": "nessie.risk_analytics.customer",
     "risk.asset.ingest": "nessie.risk_analytics.asset",
     "risk.collateral.ingest": "nessie.risk_analytics.collateral",
+}
+
+TOPIC_ENTITY_MAP = {
+    "risk.deals.ingest": "deals",
+    "risk.customer.ingest": "customer",
+    "risk.asset.ingest": "asset",
+    "risk.collateral.ingest": "collateral",
 }
 
 DEALS_SCHEMA = StructType(
@@ -193,10 +201,14 @@ def _topic_date_column(topic: str) -> str:
     return "valuation_date"
 
 
-def _trigger_pipeline(spark: SparkSession, as_of_date: str) -> None:
-    payload = json.dumps({"as_of_date": as_of_date, "source": "kafka-entity-stream"})
+def _trigger_pipeline(spark: SparkSession, entity_dates: dict[str, str]) -> None:
+    """Publish one trigger event per entity touched by the micro-batch."""
+    rows = [
+        (entity, build_trigger_payload(entity, as_of_date))
+        for entity, as_of_date in sorted(entity_dates.items())
+    ]
     (
-        spark.createDataFrame([(TRIGGER_TOPIC, payload)], ["key", "value"])
+        spark.createDataFrame(rows, ["key", "value"])
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .write.format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP)
@@ -217,7 +229,7 @@ def process_batch(batch_df: DataFrame, batch_id: int) -> None:
     )
 
     rows_written = 0
-    max_date = None
+    entity_dates: dict[str, str] = {}
 
     for topic in INGEST_TOPICS:
         topic_rows = parsed.filter(F.col("topic") == F.lit(topic))
@@ -234,14 +246,13 @@ def process_batch(batch_df: DataFrame, batch_id: int) -> None:
         rows_written += normalized.count()
 
         date_value = _max_date_string(normalized, _topic_date_column(topic))
-        if date_value and (max_date is None or date_value > max_date):
-            max_date = date_value
+        entity_dates[TOPIC_ENTITY_MAP[topic]] = date_value or date.today().isoformat()
 
     if rows_written == 0:
         return
 
-    _trigger_pipeline(batch_df.sparkSession, max_date or date.today().isoformat())
-    print(f"[kafka-entity-stream] batch={batch_id} rows={rows_written} as_of_date={max_date}")
+    _trigger_pipeline(batch_df.sparkSession, entity_dates)
+    print(f"[kafka-entity-stream] batch={batch_id} rows={rows_written} entities={entity_dates}")
 
 
 def main() -> None:

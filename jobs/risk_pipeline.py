@@ -1,7 +1,9 @@
 """Domain transformations for Risk Analytics exposure aggregation; no orchestration concerns."""
 from __future__ import annotations
 
-from pyspark.sql import DataFrame, functions as F
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+
 from risk_analytics.config import load_config
 
 

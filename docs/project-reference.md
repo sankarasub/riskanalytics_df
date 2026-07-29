@@ -13,6 +13,9 @@ This page describes what each major file/folder is used for and how to configure
 - `mkdocs.yml`: documentation site nav and rendering config.
 - `setup_venv.py`: host Python virtual-environment bootstrap and optional library upgrade flow (`--update-libraries`).
 - `requirements-lock.txt`: locked dependency snapshot.
+- `requirements/dev.txt`: pinned lint/type tooling (`ruff`, `mypy`, type stubs).
+- `ruff.toml` and `mypy.ini`: lint and type-check configuration used locally and in CI.
+- `.github/workflows/ci.yml`: ruff, mypy, unit tests, `docker compose config`, and Airflow DAG parsing.
 
 ### Orchestration
 
@@ -20,14 +23,14 @@ This page describes what each major file/folder is used for and how to configure
 - `airflow/dags/ra_createtables_and_data.py`: bootstrap DAG (create tables, seed sources, trigger orchestration).
 - `airflow/dags/ra_stage_jobs.py`: factory for the eight `ra_<source>_<entity>_stage` DAGs.
 - `airflow/dags/ra_ods_jobs.py`: factory for the eight `ra_<source>_<entity>_ods` DAGs.
-- `airflow/dags/ra_stage_to_ods_orchestration.py`: STAGE -> ODS -> risk metrics orchestration.
+- `airflow/dags/ra_stage_to_ods_orchestration.py`: STAGE -> ODS -> risk metrics orchestration; one TaskGroup per source/entity, all eight running concurrently with deferred waits.
 - `airflow/dags/ra_riskmetrics_eval_ods.py`: final risk metric evaluation DAG.
-- `airflow/dags/ra_kafka_streaming.py`: `ra_kafka_customer_stage` and `ra_kafka_customer_ods` streaming DAGs.
+- `airflow/dags/ra_kafka_streaming.py`: factory for the eight `ra_kafka_<entity>_stage` / `ra_kafka_<entity>_ods` streaming DAGs.
 
 ### Jobs
 
 - `jobs/bootstrap.py`: table creation and seed loading.
-- `jobs/run_source_to_ods_step.py`: parameterized stage/ODS step execution.
+- `jobs/run_source_to_ods_step.py`: parameterized stage/ODS step execution; `--entity` can be repeated to run several entities in one Spark session.
 - `jobs/run_risk_pipeline.py`: final risk pipeline orchestration and publish flow.
 - `jobs/risk_pipeline.py`: core Python implementation for risk metric derivation.
 - `jobs/kafka_entity_consumer.py`: streaming ingest paths for deals, customer, asset, and collateral topics.
@@ -40,6 +43,7 @@ This page describes what each major file/folder is used for and how to configure
 - `risk_analytics/nessie.py`: Nessie reference/branch merge interactions.
 - `risk_analytics/yaml_executor.py`: YAML pipeline validation, preview, execution.
 - `risk_analytics/transformations/`: supported step implementations.
+- `risk_analytics/kafka_events.py`: trigger payload builder and the `AwaitMessageSensor` match function.
 
 ### Transform metadata
 
@@ -57,6 +61,7 @@ This page describes what each major file/folder is used for and how to configure
 - `scripts/run_risk_analytics_pipeline.ps1`: end-to-end scripted execution.
 - `scripts/run_local_python_no_airflow.py`: local Python execution path.
 - `scripts/health_check.py`: service and deep data checks.
+- `scripts/validate_dags.py`: parses the DAG folder with a real `DagBag` and asserts the expected DAG ids.
 
 ### Tests and docs
 
@@ -120,7 +125,7 @@ Edit `config/platform.yaml` under the `risk` section, then rerun pipeline and co
 2. Reuse supported component types.
 3. Validate/preview through Developer UI or executor APIs.
 
-### Add a new service link in Links Portal
+### Add a new service link in the operations API links portal
 
 Update environment URL variables for `links-api` service and corresponding API/UI mapping.
 

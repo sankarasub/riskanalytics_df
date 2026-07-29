@@ -77,7 +77,7 @@ def run_tcp_check(check: TcpCheck, timeout: float) -> CheckResult:
         return CheckResult(name=check.name, status="FAIL", details=f"{type(error).__name__}: {error}")
 
 
-def run_iceberg_check(host: str, timeout: float) -> CheckResult:
+def run_iceberg_check(host: str) -> CheckResult:
     """Optionally verify the full Spark Connect-to-Iceberg query path.
 
     This is deliberately additive to service probes: a developer can run basic
@@ -162,14 +162,11 @@ def main() -> int:
         TcpCheck("postgres", postgres_host, 5432),
     ]
 
-    results: list[CheckResult] = []
-    for check in http_checks:
-        results.append(run_http_check(check, timeout))
-    for check in tcp_checks:
-        results.append(run_tcp_check(check, timeout))
+    results: list[CheckResult] = [run_http_check(http_check, timeout) for http_check in http_checks]
+    results.extend(run_tcp_check(tcp_check, timeout) for tcp_check in tcp_checks)
 
     if args.check_iceberg:
-        results.append(run_iceberg_check(host, timeout))
+        results.append(run_iceberg_check(host))
 
     print("Risk Analytics Platform Health Check")
     print("=" * 80)
