@@ -1,2 +1,6 @@
 pyiceberg[s3fs]==0.7.1
 pyyaml==6.0.2
+pandas==2.2.3
+# Server-side Arrow version; kept identical to the notebook/UI clients so
+# Spark Connect payloads are never serialized across mismatched Arrow releases.
+pyarrow==18.1.0

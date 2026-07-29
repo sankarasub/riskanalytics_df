@@ -1,7 +1,19 @@
+# Streamlit dashboards and the FastAPI operations API share this image.
 streamlit==1.46.1
-pandas==2.2.3
-requests==2.32.3
-pyspark[connect]==4.1.3
-pyyaml==6.0.2
 fastapi==0.115.8
 uvicorn==0.34.0
+pandas==2.2.3
+requests==2.32.3
+pyyaml==6.0.2
+confluent-kafka==2.6.1
+
+# Spark Connect client. The gRPC and Arrow stack is pinned explicitly: leaving it
+# to the resolver floats grpcio/grpcio-status to their newest release, which has
+# no prebuilt wheel on several architectures and then fails to compile in the
+# slim image. These pins match pyspark 4.1.3's supported minimums.
+pyspark[connect]==4.1.3
+grpcio==1.76.0
+grpcio-status==1.76.0
+protobuf==6.31.1
+pyarrow==18.1.0
+zstandard==0.25.0

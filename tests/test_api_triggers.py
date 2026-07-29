@@ -106,8 +106,40 @@ class ApiTriggerTests(unittest.TestCase):
             response = module.trigger_source_to_ods(request)
 
         self.assertEqual(response["status"], "triggered")
-        self.assertEqual(response["dag_id"], "risk_analytics_stage_load")
+        self.assertEqual(response["dag_id"], "ra_sourceA_customer_stage")
         trigger_mock.assert_called_once()
+
+    def test_pipeline_execute_routes_each_target_to_its_dag(self) -> None:
+        module = self._import_module()
+        expectations = {
+            "bootstrap": "ra_createtables_and_data",
+            "orchestration": "ra_stage_to_ods_orchestration",
+            "riskmetrics": "ra_riskmetrics_eval_ods",
+            "stage": "ra_sourceB_deals_stage",
+            "ods": "ra_sourceB_deals_ods",
+        }
+
+        for target, expected_dag_id in expectations.items():
+            request = module.PipelineExecuteRequest(
+                target=target,
+                entity="deals",
+                source="sourceb",
+                as_of_date="2026-07-18",
+            )
+            with patch.object(module, "_trigger_airflow_dag", return_value={"dag_run_id": "manual__3"}):
+                response = module.execute_pipeline_run(request)
+
+            self.assertEqual(response["status"], "triggered")
+            self.assertEqual(response["dag_id"], expected_dag_id)
+
+    def test_pipeline_execute_rejects_unknown_target(self) -> None:
+        module = self._import_module()
+        request = module.PipelineExecuteRequest(target="nonsense")
+
+        with self.assertRaises(Exception) as raised:
+            module.execute_pipeline_run(request)
+
+        self.assertEqual(raised.exception.status_code, 400)
 
     def test_publish_kafka_event_with_pipeline_trigger(self) -> None:
         module = self._import_module()
@@ -146,7 +178,7 @@ class ApiTriggerTests(unittest.TestCase):
         self.assertEqual(response["pipeline_dag_run_id"], "manual__2")
         self.assertEqual(len(produced), 1)
         trigger_mock.assert_called_once_with(
-            "risk_analytics_kafka_entity_orchestration",
+            "ra_riskmetrics_eval_ods",
             {"as_of_date": "2026-07-18"},
         )
 

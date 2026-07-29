@@ -35,6 +35,7 @@ markdown_extensions:
 nav:
   - Overview of This Project: index.md
   - Framework Overview, System Design & Tech Stack: architecture.md
+  - Architecture Diagrams: architecture-diagram.md
   - Data Model and Risk Metrics: data-model-risk-metrics.md
   - Platform Interfaces and Operations: platform-interfaces-and-operations.md
   - Runbook and Local Execution: runbooks.md

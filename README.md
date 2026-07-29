@@ -10,6 +10,7 @@ Local, production-oriented development scaffold for a Risk Analytics (Risk Analy
 - [README.md](README.md): Quick start, architecture, service access, and operational commands.
 - [docs/framework_overview.md](docs/framework_overview.md): Detailed architecture, execution flow, Kafka usage, and step-by-step run examples.
 - [docs/project-reference.md](docs/project-reference.md): Canonical end-to-end project reference including architecture, runtime flow, and repository structure.
+- [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md): component, pipeline, orchestration, and streaming diagrams (also published as [Architecture Diagrams](docs/architecture-diagram.md)).
 - [docs/dependency-cache-guide.md](docs/dependency-cache-guide.md): Where dependencies are downloaded/cached and how to inspect underlying Docker files and volumes.
 
 ## Documentation website
@@ -153,9 +154,17 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
 
 4. Or orchestrate through Airflow with DAG order:
 
-   1. `risk_analytics_create_tables_and_load_data`
-   2. `risk_analytics_source_to_ods_orchestration` (runs stage then ODS across entities/sources)
-   3. `risk_analytics_pipeline` (final risk metrics only)
+   1. `ra_createtables_and_data` — creates every table, seeds the Source A/Source B raw tables, then triggers the orchestration below.
+   2. `ra_stage_to_ods_orchestration` — for each entity and source triggers `ra_<source>_<entity>_stage`, waits for it, then `ra_<source>_<entity>_ods`.
+   3. `ra_riskmetrics_eval_ods` — final risk metric evaluation over ODS, triggered automatically once all ODS loads finish.
+
+   The per-entity DAGs can also be triggered on their own:
+
+   | Layer | DAG IDs | YAML definition |
+   | --- | --- | --- |
+   | STAGE | `ra_sourceA_customer_stage`, `ra_sourceB_customer_stage`, `ra_sourceA_asset_stage`, `ra_sourceB_asset_stage`, `ra_sourceA_collateral_stage`, `ra_sourceB_collateral_stage`, `ra_sourceA_deals_stage`, `ra_sourceB_deals_stage` | `transform/source_to_ods/stage_<entity>_<source>.yaml` |
+   | ODS | `ra_sourceA_customer_ods`, `ra_sourceB_customer_ods`, `ra_sourceA_asset_ods`, `ra_sourceB_asset_ods`, `ra_sourceA_collateral_ods`, `ra_sourceB_collateral_ods`, `ra_sourceA_deals_ods`, `ra_sourceB_deals_ods` | `transform/source_to_ods/ods_<entity>_<source>.yaml` |
+   | Streaming | `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods` | same STAGE/ODS customer YAML files |
 
 5. Or run the full platform helper script:
 
@@ -203,7 +212,8 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
 | Spark master | http://localhost:8080 | None |
 | JupyterLab notebook | http://localhost:8888 | None (local development only) |
 | Dremio Community | http://localhost:9047 | Create an account on first visit |
-| Nessie API | http://localhost:19120 | None |
+| Nessie catalog UI | http://localhost:19120/tree/main | None |
+| Nessie API | http://localhost:19120/api/v2 | None |
 | Kafka UI | http://localhost:8090 | None |
 
 ### Enhanced UI Features
@@ -301,6 +311,22 @@ Ready-to-use notebooks are available under [notebooks](notebooks):
 - [notebooks/risk_analytics_spark_connect_nessie_queries.ipynb](notebooks/risk_analytics_spark_connect_nessie_queries.ipynb): Spark Connect queries for risk data, Iceberg snapshots, and Nessie branches.
 - [notebooks/risk_analytics_operational_checks.ipynb](notebooks/risk_analytics_operational_checks.ipynb): smoke-test notebook for service connectivity and catalog visibility.
 
+### Use the operations API
+
+The FastAPI service on http://localhost:8000 serves the links portal and operational endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | API, Spark Connect, and Nessie catalog status (`?include_spark=false` skips the Spark round trip). |
+| `GET /tables` | Iceberg tables per configured namespace in the Nessie catalog. |
+| `POST /pipeline/execute` | Triggers a pipeline run: `target` is one of `bootstrap`, `orchestration`, `stage`, `ods`, `riskmetrics`. |
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+Invoke-RestMethod http://localhost:8000/tables
+Invoke-RestMethod -Method Post http://localhost:8000/pipeline/execute -ContentType application/json -Body '{"target":"orchestration","as_of_date":"2026-07-18"}'
+```
+
 ### Run the health-check job
 
 Use [scripts/health_check.py](scripts/health_check.py) to validate that required services are reachable and behaving as expected.
@@ -355,7 +381,7 @@ Dremio Community is included for local exploration only. On its first startup, i
    FROM risk_analytics_nessie.risk_analytics_ods.risk_metrics;
    ```
 
-   You can also trigger the pipeline in Airflow: open the `risk_analytics_create_tables_and_load_data` DAG (for full create+seed+orchestration) or `risk_analytics_source_to_ods_orchestration` DAG (for stage+ODS+final runs on existing tables), then select **Trigger DAG**.
+   You can also trigger the pipeline in Airflow: open the `ra_createtables_and_data` DAG (for full create+seed+orchestration) or `ra_stage_to_ods_orchestration` DAG (for stage+ODS+final runs on existing tables), then select **Trigger DAG**.
 
 ### Useful commands
 

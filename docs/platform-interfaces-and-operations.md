@@ -8,7 +8,7 @@ This page consolidates all user-facing and operator-facing interfaces in one pla
 
 | Interface | URL | Service | Image | Primary users |
 | --- | --- | --- | --- | --- |
-| Links Portal (FastAPI) | `http://localhost:8000` | `links-api` | `risk-analytics/ui:3.11.11` | All users |
+| Operations API (FastAPI) | `http://localhost:8000` | `links-api` | `risk-analytics/ui:3.11.11` | All users |
 | Business Dashboard | `http://localhost:8501` | `business-ui` | `risk-analytics/ui:3.11.11` | Business and risk users |
 | Developer Dashboard | `http://localhost:8502` | `developer-ui` | `risk-analytics/ui:3.11.11` | Data engineers |
 | Airflow | `http://localhost:8088` | `airflow-webserver` | `risk-analytics/airflow:2.10.5` | Platform operators |
@@ -102,12 +102,12 @@ Notes:
 - If you run `docker compose down -v`, one-time UI metadata is reset and must be redone for tools that store state (especially Dremio).
 - Airflow init tasks run automatically during bootstrap; if credentials are changed in `.env`, recreate Airflow metadata volume and rerun init.
 
-## Links Portal (FastAPI)
+## Operations API (FastAPI)
 
 Purpose:
 
 - Central landing page to access all interfaces and API endpoints.
-- Lightweight service discovery for demos and operations.
+- Operational endpoints for health, catalog inspection, and pipeline triggering.
 
 Key configuration:
 
@@ -116,13 +116,28 @@ Key configuration:
   - `DEVELOPER_UI_URL`
   - `NOTEBOOK_URL`
   - `DREMIO_URL`
+  - `NESSIE_UI_URL` (browser URL, `http://localhost:19120/tree/main`)
   - `AIRFLOW_URL`
   - `KAFKA_UI_URL`
+- `SPARK_REMOTE` (`sc://spark-connect:15002`) for the Spark checks used by `/health` and `/tables`.
+
+Operational endpoints:
+
+| Endpoint | Purpose | Notes |
+| --- | --- | --- |
+| `GET /` | Links portal HTML page. | Service discovery for all UIs. |
+| `GET /health` | Reports API, Spark Connect, and Nessie catalog status. | Returns `degraded` (HTTP 200) when a dependency is down; add `?include_spark=false` to skip the Spark round trip. |
+| `GET /tables` | Lists Iceberg tables per configured namespace in the Nessie catalog. | Uses `SHOW TABLES IN nessie.<namespace>` for the source, stage, and ODS namespaces. |
+| `POST /pipeline/execute` | Triggers a pipeline run through Airflow. | `target` is one of `bootstrap`, `orchestration`, `stage`, `ods`, `riskmetrics`; `stage`/`ods` also take `entity` and `source`. |
 
 Usage:
 
-- Open `http://localhost:8000` and navigate to target interface.
-- Use health endpoint for quick checks: `http://localhost:8000/health`.
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+Invoke-RestMethod http://localhost:8000/tables
+Invoke-RestMethod -Method Post http://localhost:8000/pipeline/execute -ContentType application/json -Body '{"target":"orchestration","as_of_date":"2026-07-18"}'
+Invoke-RestMethod -Method Post http://localhost:8000/pipeline/execute -ContentType application/json -Body '{"target":"stage","entity":"customer","source":"sourceb","as_of_date":"2026-07-18"}'
+```
 
 ## Business Dashboard
 
@@ -174,10 +189,15 @@ Purpose:
 
 Core DAGs:
 
-- `risk_analytics_create_tables_and_load_data`
-- `risk_analytics_source_to_ods_orchestration`
-- `risk_analytics_pipeline`
-- `risk_analytics_kafka_listener`
+| DAG | Role |
+| --- | --- |
+| `ra_createtables_and_data` | Creates every Iceberg table, seeds the Source A/Source B raw tables, then triggers the orchestration. |
+| `ra_stage_to_ods_orchestration` | For each entity and source triggers the STAGE DAG, waits, triggers the ODS DAG, then triggers risk metrics. |
+| `ra_<source>_<entity>_stage` | Eight DAGs (`ra_sourceA_customer_stage` ... `ra_sourceB_deals_stage`) running `transform/source_to_ods/stage_<entity>_<source>.yaml`. |
+| `ra_<source>_<entity>_ods` | Eight DAGs (`ra_sourceA_customer_ods` ... `ra_sourceB_deals_ods`) running `transform/source_to_ods/ods_<entity>_<source>.yaml`. |
+| `ra_riskmetrics_eval_ods` | Evaluates and publishes risk metrics from ODS data. |
+| `ra_kafka_customer_stage` | Kafka sensor DAG: loads the customer STAGE micro-batch, then triggers `ra_kafka_customer_ods`. |
+| `ra_kafka_customer_ods` | Loads the customer ODS micro-batch, then triggers `ra_riskmetrics_eval_ods`. |
 
 How it is run:
 
@@ -195,8 +215,8 @@ Useful commands:
 
 ```powershell
 docker compose exec airflow-webserver airflow dags list
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline
-docker compose exec airflow-webserver airflow dags trigger risk_analytics_pipeline --conf '{"as_of_date":"2026-07-18"}'
+docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
+docker compose exec airflow-webserver airflow dags trigger ra_riskmetrics_eval_ods --conf '{"as_of_date":"2026-07-18"}'
 ```
 
 Expected results:
@@ -208,15 +228,17 @@ Airflow dependency flow:
 
 ```mermaid
 flowchart TD
-  bootstrap[Create tables and load source data] --> fanout[Source-to-ODS orchestration]
-  fanout --> stageA[Stage loads Source A]
-  fanout --> stageB[Stage loads Source B]
-  stageA --> odsA[ODS merges Source A]
-  stageB --> odsB[ODS merges Source B]
+  bootstrap[ra_createtables_and_data] --> fanout[ra_stage_to_ods_orchestration]
+  fanout --> stageA["ra_sourceA_&lt;entity&gt;_stage"]
+  fanout --> stageB["ra_sourceB_&lt;entity&gt;_stage"]
+  stageA --> odsA["ra_sourceA_&lt;entity&gt;_ods"]
+  stageB --> odsB["ra_sourceB_&lt;entity&gt;_ods"]
   odsA --> join[All stage and ODS loads complete]
   odsB --> join
-  join --> risk[Final risk pipeline]
-  kafka[Kafka pipeline trigger] --> listener[Kafka listener DAG] --> fanout
+  join --> risk[ra_riskmetrics_eval_ods]
+  kafka[risk.pipeline.trigger] --> kstage[ra_kafka_customer_stage]
+  kstage --> kods[ra_kafka_customer_ods]
+  kods --> risk
   risk --> metrics[Published risk_metrics table]
 ```
 
@@ -337,9 +359,10 @@ flowchart LR
   ingest_collateral --> stream
   stream --> source[Write rows to source contracts]
   source --> trigger[risk.pipeline.trigger]
-  trigger --> listener[Airflow listener DAG]
-  listener --> pipeline[risk_analytics_kafka_entity_orchestration]
-  pipeline --> published[risk.metrics.published]
+  trigger --> listener[ra_kafka_customer_stage]
+  listener --> kods[ra_kafka_customer_ods]
+  kods --> risk[ra_riskmetrics_eval_ods]
+  risk --> published[risk.metrics.published]
 ```
 
 ### Kafka Runtime Details
@@ -361,22 +384,24 @@ Entity ingest consumer:
 
 Airflow DAG sequence after trigger:
 
-1. `risk_analytics_kafka_listener` consumes `risk.pipeline.trigger`
-2. Listener triggers `risk_analytics_kafka_entity_orchestration`
-3. Orchestration runs stage + ODS loads for `customer`, `asset`, `collateral`, `deals`
-4. Orchestration triggers `risk_analytics_pipeline`
-5. Pipeline publishes summary event to `risk.metrics.published`
+1. `ra_kafka_customer_stage` waits on `risk.pipeline.trigger` and loads the customer STAGE micro-batch
+2. It triggers `ra_kafka_customer_ods`, which loads the customer ODS micro-batch
+3. `ra_kafka_customer_ods` triggers `ra_riskmetrics_eval_ods` directly, so metrics reflect the micro-batch
+4. The risk job publishes a summary event to `risk.metrics.published`
+
+Non-customer ingest topics land in the source tables through `kafka-entity-stream`; their STAGE and ODS
+loads run through the batch DAGs (`ra_stage_to_ods_orchestration`), not through the streaming DAGs.
 
 ### Kafka Topic to Table to DAG Matrix
 
 | Kafka topic | Consumer/service | Target table | Trigger topic | Airflow DAG chain |
 | --- | --- | --- | --- | --- |
-| `risk.customer.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.customer` | `risk.pipeline.trigger` | `risk_analytics_kafka_listener` -> `risk_analytics_kafka_entity_orchestration` -> `risk_analytics_pipeline` |
-| `risk.asset.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.asset` | `risk.pipeline.trigger` | `risk_analytics_kafka_listener` -> `risk_analytics_kafka_entity_orchestration` -> `risk_analytics_pipeline` |
-| `risk.collateral.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.collateral` | `risk.pipeline.trigger` | `risk_analytics_kafka_listener` -> `risk_analytics_kafka_entity_orchestration` -> `risk_analytics_pipeline` |
-| `risk.deals.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.deals` | `risk.pipeline.trigger` | `risk_analytics_kafka_listener` -> `risk_analytics_kafka_entity_orchestration` -> `risk_analytics_pipeline` |
-| `risk.pipeline.trigger` | `risk_analytics_kafka_listener` (Airflow sensor) | XCom payload (`as_of_date`) | N/A | Triggers `risk_analytics_kafka_entity_orchestration` |
-| `risk.metrics.published` | Downstream consumers / monitoring | Event payload (`as_of_date`, `run_id`, `row_count`) | N/A | Produced by `risk_analytics_pipeline` completion |
+| `risk.customer.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.customer` | `risk.pipeline.trigger` | `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.asset.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.asset` | `risk.pipeline.trigger` | Batch DAGs `ra_sourceA_asset_stage` / `ra_sourceA_asset_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.collateral.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.collateral` | `risk.pipeline.trigger` | Batch DAGs `ra_sourceA_collateral_stage` / `ra_sourceA_collateral_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.deals.ingest` | `kafka-entity-stream` (`jobs/kafka_entity_consumer.py`) | `nessie.risk_analytics.deals` | `risk.pipeline.trigger` | Batch DAGs `ra_sourceA_deals_stage` / `ra_sourceA_deals_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.pipeline.trigger` | `ra_kafka_customer_stage` (Airflow sensor) | XCom payload (`as_of_date`) | N/A | `ra_kafka_customer_stage` -> `ra_kafka_customer_ods` -> `ra_riskmetrics_eval_ods` |
+| `risk.metrics.published` | Downstream consumers / monitoring | Event payload (`as_of_date`, `run_id`, `row_count`) | N/A | Produced by `ra_riskmetrics_eval_ods` completion |
 
 ### Example Kafka Payloads
 

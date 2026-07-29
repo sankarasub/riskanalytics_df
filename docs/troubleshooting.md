@@ -98,13 +98,13 @@ List DAGs and runs:
 
 ```powershell
 docker compose exec airflow-webserver airflow dags list
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline
+docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
 ```
 
 List task states for a run:
 
 ```powershell
-docker compose exec airflow-webserver airflow tasks states-for-dag-run risk_analytics_pipeline <dag_run_id>
+docker compose exec airflow-webserver airflow tasks states-for-dag-run ra_riskmetrics_eval_ods <dag_run_id>
 ```
 
 Restart Airflow services:
@@ -173,10 +173,10 @@ Pause/resume listener flow:
 
 ```powershell
 docker compose stop kafka-entity-stream
-docker compose exec airflow-webserver airflow dags pause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage
 
 docker compose start kafka-entity-stream
-docker compose exec airflow-webserver airflow dags unpause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
 ```
 
 ## Cache and Dependency Troubleshooting

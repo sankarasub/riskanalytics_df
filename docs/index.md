@@ -40,6 +40,7 @@ The delivery demonstrates production-minded data engineering practices in a port
 ## Documentation Map
 
 - [Framework Overview, System Design & Tech Stack](architecture.md): architecture, runtime flow, and execution paths.
+- [Architecture Diagrams](architecture-diagram.md): component, orchestration, streaming, and lineage diagrams.
 - [Data Model and Risk Metrics](data-model-risk-metrics.md): table contracts, lineage, formulas, and worked examples.
 - [Platform Interfaces and Operations](platform-interfaces-and-operations.md): dashboard, orchestration, SQL, notebook, and messaging interfaces.
 - [Runbook and Local Execution](runbooks.md): setup, first run, offline run, and local no-Airflow execution.

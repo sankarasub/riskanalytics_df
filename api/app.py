@@ -27,15 +27,24 @@ LINKS: list[dict[str, str]] = [
     _link("Developer Dashboard", os.getenv("DEVELOPER_UI_URL", "http://localhost:8502"), "Pipeline controls and runtime visibility."),
     _link("JupyterLab Notebook", os.getenv("NOTEBOOK_URL", "http://localhost:8888"), "Interactive Spark Connect notebooks."),
     _link("Dremio", os.getenv("DREMIO_URL", "http://localhost:9047"), "SQL exploration on Nessie/Iceberg tables."),
-    _link("Nessie API", os.getenv("NESSIE_URL", "http://localhost:19120/api/v2"), "Versioned catalog API and branch operations."),
+    _link("Nessie Catalog UI", os.getenv("NESSIE_UI_URL", "http://localhost:19120/tree/main"), "Versioned catalog browser for branches, commits, and tables."),
     _link("Airflow", os.getenv("AIRFLOW_URL", "http://localhost:8088"), "DAG orchestration and task monitoring."),
     _link("Kafka UI", os.getenv("KAFKA_UI_URL", "http://localhost:8090"), "Browse Kafka topics, messages, and consumer groups."),
 ]
 
 
-app = FastAPI(title="Risk Analytics Links", version="1.0.0")
+API_VERSION = "2.0.0"
+
+app = FastAPI(title="Risk Analytics Platform API", version=API_VERSION)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRANSFORM_DIR = REPO_ROOT / "transform"
+
+ENTITIES = ("customer", "asset", "collateral", "deals")
+SOURCE_LABELS = {"sourcea": "sourceA", "sourceb": "sourceB"}
+CATALOG_NAMESPACE_KEYS = ("namespace", "stage_namespace", "ods_namespace")
+ORCHESTRATION_DAG_ID = "ra_stage_to_ods_orchestration"
+BOOTSTRAP_DAG_ID = "ra_createtables_and_data"
+RISK_METRICS_DAG_ID = "ra_riskmetrics_eval_ods"
 
 
 class PipelineRequest(BaseModel):
@@ -57,6 +66,15 @@ class SourceToOdsTriggerRequest(BaseModel):
   entity: str = Field(default="customer", description="Entity name for stage/ods mode")
   source: str = Field(default="sourcea", description="One of: sourcea, sourceb")
   as_of_date: str = Field(default_factory=lambda: date.today().isoformat())
+  paths: dict[str, str] = Field(default_factory=dict)
+
+
+class PipelineExecuteRequest(BaseModel):
+  target: str = Field(default="orchestration", description="One of: bootstrap, orchestration, stage, ods, riskmetrics")
+  entity: str = Field(default="customer", description="Entity name for the stage/ods targets")
+  source: str = Field(default="sourcea", description="One of: sourcea, sourceb")
+  as_of_date: str = Field(default_factory=lambda: date.today().isoformat())
+  data_model: str = Field(default="source-to-ods", description="Data model for the risk metrics target")
   paths: dict[str, str] = Field(default_factory=dict)
 
 
@@ -82,6 +100,24 @@ def _resolve_pipeline_path(pipeline: str) -> Path:
   if not candidate.exists():
     raise FileNotFoundError(f"Pipeline YAML not found: {candidate}")
   return candidate
+
+
+def _stage_dag_id(entity: str, source: str) -> str:
+  return f"ra_{SOURCE_LABELS[source]}_{entity}_stage"
+
+
+def _ods_dag_id(entity: str, source: str) -> str:
+  return f"ra_{SOURCE_LABELS[source]}_{entity}_ods"
+
+
+def _validate_entity_and_source(entity: str, source: str) -> tuple[str, str]:
+  entity = entity.strip().lower()
+  source = source.strip().lower()
+  if entity not in ENTITIES:
+    raise HTTPException(status_code=400, detail=f"entity must be one of: {', '.join(ENTITIES)}")
+  if source not in SOURCE_LABELS:
+    raise HTTPException(status_code=400, detail=f"source must be one of: {', '.join(SOURCE_LABELS)}")
+  return entity, source
 
 
 def _trigger_airflow_dag(dag_id: str, conf: dict[str, Any]) -> dict[str, Any]:
@@ -168,9 +204,140 @@ def links() -> dict[str, list[dict[str, str]]]:
     return {"links": LINKS}
 
 
+def _check_nessie() -> dict[str, Any]:
+  """Report reachability of the versioned catalog and its default branch."""
+  config = load_config()
+  uri = config["catalog"]["nessie_uri"].rstrip("/")
+  try:
+    response = requests.get(f"{uri}/trees/main", timeout=10)
+    response.raise_for_status()
+  except requests.RequestException as error:
+    return {"status": "unavailable", "uri": uri, "error": str(error)}
+  reference = response.json().get("reference", {})
+  return {"status": "ok", "uri": uri, "default_branch": reference.get("name", "main"), "hash": reference.get("hash")}
+
+
+def _check_spark() -> dict[str, Any]:
+  """Run the cheapest possible query so the check proves an executable session."""
+  try:
+    spark = create_spark_session("risk-analytics-api-health")
+  except Exception as error:  # pragma: no cover - environment dependent
+    return {"status": "unavailable", "error": str(error)}
+  try:
+    spark.sql("SELECT 1").collect()
+    return {"status": "ok", "remote": os.getenv("SPARK_REMOTE", "local")}
+  except Exception as error:  # pragma: no cover - environment dependent
+    return {"status": "unavailable", "error": str(error)}
+  finally:
+    try:
+      spark.stop()
+    except Exception:  # pragma: no cover - stop is best effort
+      pass
+
+
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health(include_spark: bool = True) -> dict[str, Any]:
+  """Report API, Spark, and Nessie catalog status.
+
+  Component failures are reported in the payload instead of raising, so a probe
+  can distinguish a degraded platform from an unreachable API.
+  """
+  components: dict[str, Any] = {"api": {"status": "ok", "version": API_VERSION}}
+  components["nessie"] = _check_nessie()
+  components["spark"] = _check_spark() if include_spark else {"status": "skipped"}
+
+  degraded = [name for name, state in components.items() if state.get("status") == "unavailable"]
+  return {
+    "status": "degraded" if degraded else "ok",
+    "degraded_components": degraded,
+    "components": components,
+  }
+
+
+@app.get("/tables")
+def tables() -> dict[str, Any]:
+  """List the Iceberg tables registered in the Nessie catalog namespaces."""
+  config = load_config()
+  catalog_name = config["catalog"].get("name", "nessie")
+  namespaces = [config["catalog"][key] for key in CATALOG_NAMESPACE_KEYS if config["catalog"].get(key)]
+
+  try:
+    spark = create_spark_session("risk-analytics-api-tables")
+  except Exception as error:
+    raise HTTPException(status_code=503, detail=f"Spark session unavailable: {error}") from error
+
+  discovered: list[dict[str, str]] = []
+  errors: dict[str, str] = {}
+  try:
+    for namespace in namespaces:
+      try:
+        rows = spark.sql(f"SHOW TABLES IN {catalog_name}.{namespace}").collect()
+      except Exception as error:
+        errors[namespace] = str(error)
+        continue
+      for row in rows:
+        table_name = row["tableName"]
+        discovered.append(
+          {
+            "namespace": namespace,
+            "table": table_name,
+            "identifier": f"{catalog_name}.{namespace}.{table_name}",
+          }
+        )
+  finally:
+    try:
+      spark.stop()
+    except Exception:  # pragma: no cover - stop is best effort
+      pass
+
+  return {
+    "catalog": catalog_name,
+    "namespaces": namespaces,
+    "table_count": len(discovered),
+    "tables": sorted(discovered, key=lambda item: item["identifier"]),
+    "unreadable_namespaces": errors,
+  }
+
+
+@app.post("/pipeline/execute")
+def execute_pipeline_run(request: PipelineExecuteRequest) -> dict[str, Any]:
+  """Trigger a pipeline execution through Airflow.
+
+  ``target`` selects the DAG so callers can run the whole STAGE/ODS chain or a
+  single namespace step without knowing the DAG naming convention.
+  """
+  target = request.target.strip().lower()
+  conf: dict[str, Any] = {"as_of_date": request.as_of_date, **request.paths}
+
+  if target == "bootstrap":
+    dag_id = BOOTSTRAP_DAG_ID
+  elif target == "orchestration":
+    dag_id = ORCHESTRATION_DAG_ID
+  elif target == "riskmetrics":
+    dag_id = RISK_METRICS_DAG_ID
+    conf["data_model"] = request.data_model
+  elif target in {"stage", "ods"}:
+    entity, source = _validate_entity_and_source(request.entity, request.source)
+    dag_id = _stage_dag_id(entity, source) if target == "stage" else _ods_dag_id(entity, source)
+    conf.update({"entity": entity, "source": SOURCE_LABELS[source]})
+  else:
+    raise HTTPException(
+      status_code=400,
+      detail="target must be one of: bootstrap, orchestration, stage, ods, riskmetrics",
+    )
+
+  try:
+    result = _trigger_airflow_dag(dag_id, conf)
+  except requests.RequestException as error:
+    raise HTTPException(status_code=502, detail=f"Airflow trigger failed: {error}") from error
+
+  return {
+    "status": "triggered",
+    "target": target,
+    "dag_id": dag_id,
+    "dag_run_id": result.get("dag_run_id"),
+    "conf": conf,
+  }
 
 
 @app.get("/api/v1/pipelines")
@@ -279,12 +446,10 @@ def trigger_source_to_ods(request: SourceToOdsTriggerRequest) -> dict[str, Any]:
   if source not in {"sourcea", "sourceb"}:
     raise HTTPException(status_code=400, detail="source must be one of: sourcea, sourceb")
 
-  dag_id_map = {
-    "full": "risk_analytics_source_to_ods_orchestration",
-    "stage": "risk_analytics_stage_load",
-    "ods": "risk_analytics_ods_load",
-  }
-  dag_id = dag_id_map[mode]
+  if mode == "full":
+    dag_id = ORCHESTRATION_DAG_ID
+  else:
+    dag_id = _stage_dag_id(entity, source) if mode == "stage" else _ods_dag_id(entity, source)
   conf = {
     "as_of_date": request.as_of_date,
     "entity": entity,
@@ -340,7 +505,7 @@ def publish_kafka_event(request: KafkaPublishRequest) -> dict[str, Any]:
   if request.trigger_pipeline:
     pipeline_conf = {"as_of_date": request.as_of_date}
     try:
-      triggered = _trigger_airflow_dag("risk_analytics_kafka_entity_orchestration", pipeline_conf)
+      triggered = _trigger_airflow_dag(RISK_METRICS_DAG_ID, pipeline_conf)
     except requests.RequestException as error:
       raise HTTPException(status_code=502, detail=f"Kafka publish succeeded, but pipeline trigger failed: {error}") from error
 

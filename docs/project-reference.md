@@ -16,7 +16,13 @@ This page describes what each major file/folder is used for and how to configure
 
 ### Orchestration
 
-- `airflow/dags/`: DAG definitions for bootstrap, source-to-ODS orchestration, risk pipeline, and Kafka listener.
+- `airflow/dags/ra_common.py`: shared DAG constants and `spark-submit` command builders.
+- `airflow/dags/ra_createtables_and_data.py`: bootstrap DAG (create tables, seed sources, trigger orchestration).
+- `airflow/dags/ra_stage_jobs.py`: factory for the eight `ra_<source>_<entity>_stage` DAGs.
+- `airflow/dags/ra_ods_jobs.py`: factory for the eight `ra_<source>_<entity>_ods` DAGs.
+- `airflow/dags/ra_stage_to_ods_orchestration.py`: STAGE -> ODS -> risk metrics orchestration.
+- `airflow/dags/ra_riskmetrics_eval_ods.py`: final risk metric evaluation DAG.
+- `airflow/dags/ra_kafka_streaming.py`: `ra_kafka_customer_stage` and `ra_kafka_customer_ods` streaming DAGs.
 
 ### Jobs
 
@@ -24,7 +30,8 @@ This page describes what each major file/folder is used for and how to configure
 - `jobs/run_source_to_ods_step.py`: parameterized stage/ODS step execution.
 - `jobs/run_risk_pipeline.py`: final risk pipeline orchestration and publish flow.
 - `jobs/risk_pipeline.py`: core Python implementation for risk metric derivation.
-- Kafka entity consumers under `jobs/`: streaming ingest paths for deals, customer, asset, and collateral topics.
+- `jobs/kafka_entity_consumer.py`: streaming ingest paths for deals, customer, asset, and collateral topics.
+- `jobs/execute_pipeline.py`: ad-hoc runner for a single YAML pipeline definition.
 
 ### Runtime package
 
@@ -43,7 +50,7 @@ This page describes what each major file/folder is used for and how to configure
 
 - `ui/business_app.py`: business dashboard.
 - `ui/developer_app.py`: developer dashboard.
-- `api/app.py`: links portal and API endpoints.
+- `api/app.py`: links portal plus operational endpoints (`/health`, `/tables`, `/pipeline/execute`) and YAML pipeline endpoints.
 
 ### Operations scripts
 

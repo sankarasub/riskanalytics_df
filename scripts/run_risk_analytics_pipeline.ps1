@@ -294,17 +294,21 @@ Invoke-Compose -Args @('compose', 'ps', '--all') -FailureMessage 'docker compose
 Wait-ForRequiredServices -RequiredServices @('spark-master', 'airflow-webserver', 'airflow-scheduler', 'business-ui', 'postgres', 'nessie')
 
 $dagIdsToUnpause = @(
-    'risk_analytics_create_tables_and_load_data',
-    'risk_analytics_source_to_ods_orchestration',
-    'risk_analytics_stage_load',
-    'risk_analytics_ods_load',
-    'risk_analytics_pipeline'
+    'ra_createtables_and_data',
+    'ra_stage_to_ods_orchestration',
+    'ra_riskmetrics_eval_ods'
 )
+foreach ($source in @('sourceA', 'sourceB')) {
+    foreach ($entity in @('customer', 'asset', 'collateral', 'deals')) {
+        $dagIdsToUnpause += "ra_${source}_${entity}_stage"
+        $dagIdsToUnpause += "ra_${source}_${entity}_ods"
+    }
+}
 
 Unpause-AirflowDags -DagIds $dagIdsToUnpause
 
 Write-Host "Triggering Airflow workflow for $AsOfDate..."
-Invoke-AirflowDagTrigger -DagId 'risk_analytics_create_tables_and_load_data' -AsOfDate $AsOfDate
+Invoke-AirflowDagTrigger -DagId 'ra_createtables_and_data' -AsOfDate $AsOfDate
 
 Write-Host 'Running loaded-table validation query...'
 Invoke-ValidationQuery

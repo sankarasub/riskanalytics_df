@@ -38,7 +38,7 @@ flowchart LR
     stream --> iceberg[Write rows to Iceberg via Nessie]
     stream --> trigger[risk.pipeline.trigger]
     trigger --> listener[Airflow listener DAG]
-    listener --> pipeline[risk_analytics_pipeline]
+    listener --> pipeline[ra_riskmetrics_eval_ods]
     pipeline --> published[risk.metrics.published]
 ```
 
@@ -72,7 +72,7 @@ docker compose exec airflow-webserver airflow connections add kafka_default --co
 Unpause listener DAG:
 
 ```powershell
-docker compose exec airflow-webserver airflow dags unpause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
 ```
 
 ## Operational Checks
@@ -92,8 +92,8 @@ Expected topics:
 Check listener and pipeline DAG runs:
 
 ```powershell
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_kafka_listener
-docker compose exec airflow-webserver airflow dags list-runs -d risk_analytics_pipeline
+docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_stage
+docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
 ```
 
 ## When to Disable Kafka Path
@@ -102,12 +102,12 @@ If you only need deterministic batch runs, you can pause/stop Kafka-driven flow.
 
 ```powershell
 docker compose stop trade-stream
-docker compose exec airflow-webserver airflow dags pause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags pause ra_kafka_customer_stage
 ```
 
 Re-enable when needed:
 
 ```powershell
 docker compose start trade-stream
-docker compose exec airflow-webserver airflow dags unpause risk_analytics_kafka_listener
+docker compose exec airflow-webserver airflow dags unpause ra_kafka_customer_stage
 ```

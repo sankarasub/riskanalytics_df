@@ -17,10 +17,52 @@ def run(cmd: list[str], cwd: Path | None = None, *, env: dict[str, str] | None =
     return subprocess.run(cmd, cwd=str(cwd or ROOT), env=env, text=True, capture_output=True)
 
 
+REQUIREMENTS_FILE_NAMES = ("ui.txt", "notebook.txt", "docs.txt", "airflow.txt", "spark.txt")
+
+# Imports the local (non-Docker) run paths depend on: Spark Connect client,
+# Arrow bridge, gRPC transport, API server, and the dashboards.
+LOCAL_MODE_IMPORTS = (
+    ("pyspark", "pyspark"),
+    ("pyarrow", "pyarrow"),
+    ("grpc", "grpcio"),
+    ("google.protobuf", "protobuf"),
+    ("fastapi", "fastapi"),
+    ("uvicorn", "uvicorn"),
+    ("streamlit", "streamlit"),
+    ("yaml", "pyyaml"),
+)
+
+
 def get_venv_python() -> Path:
     if os.name == "nt":
         return VENV_DIR / "Scripts" / "python.exe"
     return VENV_DIR / "bin" / "python"
+
+
+def verify_local_mode(venv_python: Path) -> bool:
+    """Fail fast when the environment cannot run the platform in local mode.
+
+    A successful pip run is not proof that the Spark Connect, Arrow, and gRPC
+    stack actually imports together, which is the failure the pinned versions in
+    ``requirements/`` exist to prevent.
+    """
+    checks = "; ".join(f"import {module}" for module, _package in LOCAL_MODE_IMPORTS)
+    script = (
+        f"{checks}\n"
+        "import pyspark, pyarrow, grpc\n"
+        "print(f'pyspark={pyspark.__version__} pyarrow={pyarrow.__version__} grpcio={grpc.__version__}')\n"
+    )
+    result = run([str(venv_python), "-c", script])
+    if result.returncode != 0:
+        print("\nLocal-mode dependency check failed:", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        print(
+            "Expected packages: " + ", ".join(package for _module, package in LOCAL_MODE_IMPORTS),
+            file=sys.stderr,
+        )
+        return False
+    print("\nLocal-mode dependency check passed: " + result.stdout.strip())
+    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,38 +104,32 @@ def main() -> int:
         print(f"Virtual environment Python was not created at {venv_python}", file=sys.stderr)
         return 1
 
-    requirements_files = [
-        REQUIREMENTS_DIR / "ui.txt",
-        REQUIREMENTS_DIR / "notebook.txt",
-        REQUIREMENTS_DIR / "docs.txt",
-        REQUIREMENTS_DIR / "airflow.txt",
-        REQUIREMENTS_DIR / "spark.txt",
-    ]
+    requirements_files = [path for path in (REQUIREMENTS_DIR / name for name in REQUIREMENTS_FILE_NAMES) if path.exists()]
+    missing = [name for name in REQUIREMENTS_FILE_NAMES if not (REQUIREMENTS_DIR / name).exists()]
+    for name in missing:
+        print(f"Skipping missing requirement file: {REQUIREMENTS_DIR / name}")
 
-    failures: list[Path] = []
+    # Every group is installed in a single pip invocation so pip resolves them
+    # together. Installing them one after another lets a later file silently
+    # downgrade a package an earlier one pinned, which is how the local venv used
+    # to drift away from the Docker images.
+    print("\nInstalling: " + ", ".join(str(path.relative_to(ROOT)) for path in requirements_files))
+    pip_install_cmd = [str(venv_python), "-m", "pip", "install"]
+    if args.update_libraries:
+        pip_install_cmd.append("--upgrade")
     for req_file in requirements_files:
-        if not req_file.exists():
-            print(f"Skipping missing requirement file: {req_file}")
-            continue
+        pip_install_cmd.extend(["-r", str(req_file)])
 
-        print(f"\nInstalling {req_file.relative_to(ROOT)}")
-        pip_install_cmd = [str(venv_python), "-m", "pip", "install", "-r", str(req_file)]
-        if args.update_libraries:
-            pip_install_cmd.insert(-2, "--upgrade")
-        result = run(pip_install_cmd)
-        if result.stdout:
-            print(result.stdout)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
-
-        if result.returncode != 0:
-            failures.append(req_file)
-            print(f"Installation failed for {req_file.relative_to(ROOT)}")
-
-    if failures:
+    result = run(pip_install_cmd)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    if result.returncode != 0:
         print("\nDependency installation failed; no lock file was generated.", file=sys.stderr)
-        for req_file in failures:
-            print(f" - {req_file.relative_to(ROOT)}", file=sys.stderr)
+        return 1
+
+    if not verify_local_mode(venv_python):
         return 1
 
     # ``pip freeze --all`` records direct and transitive packages for this exact

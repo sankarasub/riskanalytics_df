@@ -8,6 +8,8 @@ from ui.common import (
     list_transform_pipelines,
     load_pipeline_yaml_text,
     nessie_references,
+    nessie_ui_url,
+    BOOTSTRAP_DAG_ID,
     publish_kafka_event,
     preview_transform_pipeline,
     save_pipeline_yaml_text,
@@ -129,7 +131,7 @@ elif page == "Data Pipeline":
         if col2.button("Run Bootstrap via Airflow"):
             with st.spinner("Triggering via Airflow..."):
                 try:
-                    result = trigger_airflow_dag("risk_analytics_create_tables_and_load_data", f"{as_of_date.isoformat()}T00:00:00Z")
+                    result = trigger_airflow_dag(BOOTSTRAP_DAG_ID, f"{as_of_date.isoformat()}T00:00:00Z")
                     st.success(f"Airflow DAG triggered: {result.get('dag_run_id')}")
                 except Exception as error:
                     st.error(f"Airflow trigger failed: {error}")
@@ -388,6 +390,7 @@ elif page == "Pipeline Studio":
     
     # Nessie references
     st.subheader("Nessie catalog references")
+    st.markdown(f"[Open the Nessie catalog UI]({nessie_ui_url()})")
     try:
         st.dataframe(nessie_references(), use_container_width=True, hide_index=True)
     except Exception as error:
