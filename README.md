@@ -1,9 +1,29 @@
 # Risk Analytics Lakehouse
 
-[![Docs Deploy](https://github.com/sansubrm/data_factory/actions/workflows/docs-pages.yml/badge.svg)](https://github.com/sansubrm/data_factory/actions/workflows/docs-pages.yml)
-[![Docs PR Check](https://github.com/sansubrm/data_factory/actions/workflows/docs-pr-check.yml/badge.svg)](https://github.com/sansubrm/data_factory/actions/workflows/docs-pr-check.yml)
+[![Docs Deploy](https://github.com/sankarasub/riskanalytics_df/actions/workflows/docs-pages.yml/badge.svg)](https://github.com/sankarasub/riskanalytics_df/actions/workflows/docs-pages.yml)
+[![Docs PR Check](https://github.com/sankarasub/riskanalytics_df/actions/workflows/docs-pr-check.yml/badge.svg)](https://github.com/sankarasub/riskanalytics_df/actions/workflows/docs-pr-check.yml)
 
-Local, production-oriented development scaffold for a Risk Analytics (Risk Analytics) data platform. It combines Spark, Apache Iceberg, Project Nessie, SeaweedFS (S3 API), Airflow, and Streamlit.
+A counterparty-risk lakehouse that runs entirely on your machine through Docker Compose. It ingests two differently-shaped source systems, standardizes them through STAGE and ODS layers, and publishes counterparty risk metrics (PFE, VaR, netted and collateralized exposure) as a versioned Iceberg table.
+
+What makes it more than a demo:
+
+- **Transformations are metadata, not code.** Every STAGE and ODS load is a YAML file executed by `risk_analytics/yaml_executor.py`, so a business rule change is a reviewable data change.
+- **Publication is atomic and reviewable.** The risk job writes to its own Nessie branch and merges to `main` only after the run succeeds, so a half-finished run can never be read as published truth.
+- **Batch and streaming share one contract.** Kafka events land in the same source tables as the batch seed, so both paths use the same STAGE/ODS YAML and produce identical ODS output.
+- **Two front doors.** A business dashboard for metrics and a developer control plane that can trigger DAGs, run pipelines, and edit YAML.
+
+## At a glance
+
+| | |
+| --- | --- |
+| Entities | `customer`, `asset`, `collateral`, `deals` |
+| Sources | Source A (JSON, pre-seeded) and Source B (CSV/JSON files, different column names and date formats) |
+| Layers | `nessie.risk_analytics` (raw) -> `nessie.risk_analytics_stage` -> `nessie.risk_analytics_ods` -> `nessie.risk_analytics_ods.risk_metrics` |
+| Published metrics | `deal_exposure`, `netted_exposure`, `collateralized_exposure`, `pfe`, `var` per counterparty and as-of date |
+| Orchestration | 27 Airflow DAGs: 1 bootstrap, 1 orchestrator, 16 batch STAGE/ODS, 8 Kafka, 1 risk evaluation |
+| Interfaces | Streamlit x2, FastAPI, Airflow, JupyterLab, Dremio, Kafka UI |
+| Stack | Spark 4.1.3, Iceberg, Nessie 0.104.3, Airflow 2.10.5, Kafka 7.7.1, SeaweedFS (S3), Postgres, Python 3.11 |
+| Runtime | Docker Compose, ~10 GB RAM recommended |
 
 ## Documentation index
 
@@ -18,7 +38,7 @@ Local, production-oriented development scaffold for a Risk Analytics (Risk Analy
 
 You can browse project markdowns as a website using MkDocs.
 
-- Published docs URL: https://sansubrm.github.io/data_factory/
+- Published docs URL: https://sankarasub.github.io/riskanalytics_df/
 
 Quick links:
 
@@ -35,45 +55,107 @@ Then open `http://127.0.0.1:8000`.
 
 For first deployment, enable GitHub Pages with source set to GitHub Actions in repository settings.
 
-## High-level architecture
+## Data flow
+
+This is the flow to understand first: what turns source files and Kafka events into published risk metrics. Both paths converge on the same tables.
+
+```mermaid
+flowchart LR
+    sa["Source A files<br/>data/sourcea/*.json"]
+    sb["Source B files<br/>data/sourceb/**"]
+    topics["Kafka ingest topics<br/>risk.&lt;entity&gt;.ingest"]
+
+    raw["nessie.risk_analytics<br/>raw source tables"]
+    stage["nessie.risk_analytics_stage<br/>&lt;entity&gt;_stage_&lt;source&gt;<br/>source-specific normalization"]
+    ods["nessie.risk_analytics_ods<br/>&lt;entity&gt;<br/>standardized contract"]
+    metrics["nessie.risk_analytics_ods.risk_metrics<br/>PFE, VaR, netted + collateralized exposure"]
+
+    consumers["Business dashboard, Dremio,<br/>JupyterLab, risk.metrics.published"]
+
+    sa --> raw
+    sb -->|"file paths passed as YAML params"| stage
+    topics -->|"jobs/kafka_entity_consumer.py"| raw
+    raw --> stage --> ods --> metrics --> consumers
+```
+
+Each arrow between layers is a YAML pipeline, not hand-written Spark code:
+
+| Step | Definition | Runner |
+| --- | --- | --- |
+| raw -> STAGE | `transform/source_to_ods/stage_<entity>_<source>.yaml` | `jobs/run_source_to_ods_step.py --layer stage` |
+| STAGE -> ODS | `transform/source_to_ods/ods_<entity>_<source>.yaml` | `jobs/run_source_to_ods_step.py --layer ods` |
+| ODS -> metrics | `transform/source_to_ods/risk_metrics_pipeline_source_to_ods.yaml` | `jobs/run_risk_pipeline.py` |
+
+## Orchestration
+
+```mermaid
+flowchart TB
+    boot["ra_createtables_and_data<br/>create tables + seed sources"]
+    orch["ra_stage_to_ods_orchestration"]
+
+    subgraph groups["8 concurrent TaskGroups, one per source and entity"]
+        pair["ra_&lt;source&gt;_&lt;entity&gt;_stage<br/>then ra_&lt;source&gt;_&lt;entity&gt;_ods"]
+    end
+
+    kafka["ra_kafka_&lt;entity&gt;_stage<br/>AwaitMessageSensor on risk.pipeline.trigger"]
+    kafkaods["ra_kafka_&lt;entity&gt;_ods"]
+    risk["ra_riskmetrics_eval_ods<br/>writes risk_metrics on a Nessie branch, then merges"]
+
+    boot --> orch --> groups --> risk
+    kafka --> kafkaods --> risk
+```
+
+The waits are deferred, so the `airflow-triggerer` service must be running. All `spark-submit` tasks share the `spark_submit` pool (`SPARK_SUBMIT_POOL_SLOTS`, default 2) so eight concurrent groups cannot start eight JVMs at once.
+
+## Platform services
 
 ```mermaid
 flowchart LR
     user["Developer / analyst"]
 
-    subgraph access["Query and application access"]
-        business["Business dashboard\nStreamlit :8501"]
-        developer["Developer dashboard\nStreamlit :8502"]
-        notebook["JupyterLab\n:8888"]
-        dremio["Dremio SQL UI\n:9047"]
-        airflow["Airflow\n:8088"]
+    subgraph access["Access - browser"]
+        business["Business dashboard<br/>Streamlit :8501"]
+        developer["Developer control plane<br/>Streamlit :8502"]
+        api["Operations API + links portal<br/>FastAPI :8000"]
+        airflowui["Airflow :8088"]
+        notebook["JupyterLab :8888"]
+        dremio["Dremio SQL :9047"]
+        kafkaui["Kafka UI :8090"]
     end
 
-    subgraph compute["Compute and orchestration"]
-        connect["Spark Connect\n:15002"]
-        master["Spark master\n:7077 / :8080"]
-        worker["Spark worker\n:8081"]
-        jobs["Risk Analytics bootstrap and\nrisk pipeline jobs"]
+    subgraph orchestration["Orchestration"]
+        scheduler["airflow-scheduler<br/>+ webserver"]
+        triggerer["airflow-triggerer<br/>deferred waits, Kafka sensors"]
+        pg["postgres<br/>Airflow metadata"]
+    end
+
+    subgraph streaming["Streaming"]
+        kafka["Kafka :29092<br/>ingest + trigger topics"]
+        stream["kafka-entity-stream<br/>Structured Streaming consumer"]
+    end
+
+    subgraph compute["Compute"]
+        connect["Spark Connect :15002<br/>UIs, API, notebooks"]
+        master["Spark master :7077 / UI :8080"]
+        worker["Spark worker UI :8081"]
     end
 
     subgraph lakehouse["Versioned Iceberg lakehouse"]
-        nessie["Project Nessie\nIceberg catalog :19120"]
-        storage["SeaweedFS\nS3 warehouse :8333"]
+        nessie["Project Nessie :19120<br/>Iceberg catalog, branches"]
+        storage["SeaweedFS S3 :8333<br/>warehouse files"]
     end
 
-    user --> business & developer & notebook & dremio & airflow
-    notebook --> connect --> master
-    airflow --> jobs --> master
-    master <--> worker
-    master --> nessie
-    master --> storage
-    connect --> nessie
-    connect --> storage
-    business --> nessie
-    developer --> nessie
-    dremio --> nessie
-    dremio --> storage
+    user --> access
+    access --> orchestration
+    access --> compute
+    orchestration -->|"spark-submit per task"| compute
+    orchestration <-->|"trigger events"| streaming
+    streaming --> compute
+    compute --> lakehouse
+    access -->|"Dremio reads the catalog directly"| lakehouse
 ```
+
+Ports and credentials for each of these are in [Open the applications](#open-the-applications).
 
 ## How to start and run
 
@@ -89,10 +171,10 @@ flowchart LR
 
 ### Start the local platform
 
-1. Open PowerShell in the project directory:
+1. Open PowerShell in your clone of this repository:
 
    ```powershell
-   cd C:\Users\Sankar\OneDrive\Documents\data_factory
+   cd D:\riskanalytics_df
    ```
 
 2. Create the local environment file:
@@ -118,6 +200,20 @@ flowchart LR
    ```
 
    `storage-init` and `airflow-init` should show `Exited (0)`; that is expected because they are one-time initialization tasks. The long-running services should show `Up`, including `spark-master`, `spark-worker`, `spark-connect`, `notebook`, `dremio`, `nessie`, `seaweedfs`, `airflow-webserver`, `airflow-scheduler`, `airflow-triggerer`, `business-ui`, and `developer-ui`.
+
+### Run via helper script
+
+The easiest way to initialize the platform, load data, and run the risk pipeline is using the provided PowerShell script:
+
+```powershell
+.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18
+```
+
+- **First-time setup:** Use `.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode first-build`
+- **Offline runs:** Use `.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode offline`
+- **Automatic UI opening:** Add the `-OpenEndpoints` flag to launch the main browser pages upon successful completion.
+
+> **Note:** If PowerShell blocks local scripts with `UnauthorizedAccess`, temporarily allow scripts for the current shell session using `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
 
 ### Load data and run the risk pipeline
 
@@ -166,49 +262,6 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
    | STAGE | `ra_sourceA_customer_stage`, `ra_sourceB_customer_stage`, `ra_sourceA_asset_stage`, `ra_sourceB_asset_stage`, `ra_sourceA_collateral_stage`, `ra_sourceB_collateral_stage`, `ra_sourceA_deals_stage`, `ra_sourceB_deals_stage` | `transform/source_to_ods/stage_<entity>_<source>.yaml` |
    | ODS | `ra_sourceA_customer_ods`, `ra_sourceB_customer_ods`, `ra_sourceA_asset_ods`, `ra_sourceB_asset_ods`, `ra_sourceA_collateral_ods`, `ra_sourceB_collateral_ods`, `ra_sourceA_deals_ods`, `ra_sourceB_deals_ods` | `transform/source_to_ods/ods_<entity>_<source>.yaml` |
    | Streaming | `ra_kafka_<entity>_stage` -> `ra_kafka_<entity>_ods` -> `ra_riskmetrics_eval_ods` for `customer`, `asset`, `collateral`, and `deals` | same STAGE/ODS YAML files as the batch DAGs |
-
-5. Or run the full platform helper script:
-
-   ```powershell
-   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18
-   ```
-
-   For first-time setup (build images + warm dependency cache), run:
-
-   ```powershell
-   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode first-build
-   ```
-
-   For regular runs (no image build, mostly offline after first build), run:
-
-   ```powershell
-   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode offline
-   ```
-
-   `offline` mode is strict: it starts only locally cached images with no image pull, build, or runtime dependency download. If required images are absent, it stops and directs you to run `first-build` while connected.
-
-   The helper starts the Docker platform, verifies that all 27 `ra_*` DAGs are registered, unpauses them, triggers `ra_createtables_and_data`, waits for the bootstrap, orchestration, and `ra_riskmetrics_eval_ods` runs to succeed, and finishes with a validation query that checks the loaded tables.
-
-   If Airflow does not know the expected DAGs, the script stops with the remediation steps instead of triggering an unknown DAG. If Airflow still lists pre-refactor `risk_analytics_*` DAGs (metadata from an earlier revision that has no DAG file), the script warns; add `-RemoveLegacyDags` to delete those entries:
-
-   ```powershell
-   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -RemoveLegacyDags
-   ```
-
-   The wait is bounded by `-WaitTimeoutMinutes` (default 60). Use `-SkipPipelineWait` to trigger and return immediately, accepting that the validation query can run before the ODS tables exist.
-
-   Add `-OpenEndpoints` if you want the script to open the main browser pages after a successful run:
-
-   ```powershell
-   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode offline -OpenEndpoints
-   ```
-
-   If PowerShell blocks local scripts with `UnauthorizedAccess` or "running scripts is disabled on this system", temporarily allow scripts for the current shell session:
-
-   ```powershell
-   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18
-   ```
 
 ### Open the applications
 
@@ -357,7 +410,7 @@ VS Code task usage:
 
 1. Open Command Palette and run **Tasks: Run Task**.
 2. Select `risk-analytics-health-check` for standard checks.
-3. Select `risk-analytics-health-check-iceberg` for the deep catalog/query check.
+3. `risk-analytics-health-check` already passes `--check-iceberg`, so it also verifies that `risk_metrics` is queryable. `.vscode/tasks.json` holds the other debug tasks (validate DAGs, tail service logs, query the ODS tables, serve the docs).
 
 The script exits with code `0` on success and `1` if any required check fails. It answers "are the
 services reachable?"; run [scripts/validate_pipeline_status.py](scripts/validate_pipeline_status.py)
@@ -434,9 +487,9 @@ The default catalog is `nessie`. Stage tables are written beneath `risk_analytic
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -t .
-.\.venv\Scriptsuff.exe check .
+.\.venv\Scripts\ruff.exe check .
 .\.venv\Scripts\mypy.exe --config-file mypy.ini
-$env:PYTHONPATH = (Get-Location).Path; .\.venv\Scripts\python.exe scriptsalidate_dags.py
+$env:PYTHONPATH = (Get-Location).Path; .\.venv\Scripts\python.exe scripts\validate_dags.py
 mkdocs build --strict
 docker compose config --quiet
 ```
@@ -446,4 +499,16 @@ docker compose config --quiet
 ## Safety model
 
 The risk job creates an isolated Nessie branch, writes the run output there, and merges it into `main` only after the write succeeds. This makes data commits reviewable and prevents incomplete runs from altering the published risk view.
+
+## Where to look when something is wrong
+
+| Symptom | Start here |
+| --- | --- |
+| `TABLE_OR_VIEW_NOT_FOUND: risk_analytics_ods.risk_metrics` | The pipeline has not finished. Run `scripts/validate_pipeline_status.py`; the helper script waits for the DAG runs before validating. |
+| Airflow lists `risk_analytics_*` DAGs | Stale metadata from before the rename. Re-run the helper with `-RemoveLegacyDags`. |
+| A DAG stays in `deferred` forever | `airflow-triggerer` is not running. |
+| A Kafka DAG never wakes up | The consumer publishes to `risk.pipeline.trigger` only when a micro-batch has rows; check `docker compose logs kafka-entity-stream`. |
+| A hand-run risk job returns zero rows | `jobs/run_risk_pipeline.py --data-model` defaults to `legacy`, whose tables are never seeded. Pass `--data-model source-to-ods`. |
+
+Full symptom-to-fix table: [docs/troubleshooting.md](docs/troubleshooting.md).
 
