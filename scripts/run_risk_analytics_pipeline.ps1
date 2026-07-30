@@ -1,3 +1,39 @@
+<#
+.SYNOPSIS
+    Starts the platform, runs the Airflow pipeline for an as-of date, and validates the result.
+
+.DESCRIPTION
+    Why this script exists: it is the single supported end-to-end entry point on
+    Windows. Doing this by hand means starting Compose, checking service
+    readiness, unpausing 27 DAGs, triggering the bootstrap, watching three DAG
+    runs in the UI, and only then running a validation query - and getting that
+    order wrong produces misleading failures (for example querying
+    `risk_analytics_ods.risk_metrics` before the metrics DAG has run).
+
+    Steps:
+      1. Verify the Docker daemon answers, and start the platform if Spark is
+         not already running (`-PlatformMode first-build|offline|none`; offline
+         refuses to build or pull and reports missing cached images instead).
+      2. Wait until the required services report running.
+      3. Verify Airflow has registered all 27 expected `ra_*` DAGs, retrying to
+         absorb scheduler parse delay. A stale checkout fails here with
+         remediation instead of triggering a DAG that no longer exists.
+      4. Report - or with `-RemoveLegacyDags` delete - `risk_analytics_*` DAG
+         metadata left over from the pre-refactor layout.
+      5. Unpause every expected DAG over the REST API.
+      6. Trigger `ra_createtables_and_data` with the as-of date.
+      7. Wait for `ra_createtables_and_data`, `ra_stage_to_ods_orchestration`,
+         and `ra_riskmetrics_eval_ods` to succeed (each DAG triggers the next),
+         bounded by `-WaitTimeoutMinutes`. `-SkipPipelineWait` skips this.
+      8. Run `scripts/health_check.py --check-iceberg` as the validation query,
+         and with `-OpenEndpoints` open the platform URLs in the browser.
+
+.EXAMPLE
+    .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18
+
+.EXAMPLE
+    .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode first-build -RemoveLegacyDags
+#>
 param(
     [Parameter()]
     [string]$AsOfDate = (Get-Date -Format 'yyyy-MM-dd'),

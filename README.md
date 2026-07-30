@@ -358,7 +358,14 @@ VS Code task usage:
 2. Select `risk-analytics-health-check` for standard checks.
 3. Select `risk-analytics-health-check-iceberg` for the deep catalog/query check.
 
-The script exits with code `0` on success and `1` if any required check fails.
+The script exits with code `0` on success and `1` if any required check fails. It answers "are the
+services reachable?"; run [scripts/validate_pipeline_status.py](scripts/validate_pipeline_status.py)
+for the next question, "is the platform loaded correctly?" — it compares Airflow's registered DAGs
+against the 27 shipped `ra_*` DAGs, flags leftover `risk_analytics_*` metadata and paused DAGs, and
+queries the ODS layer.
+
+Every script in `scripts/` — why it exists, when to use it, and what each step does — is documented in
+[docs/scripts-reference.md](docs/scripts-reference.md).
 
 ### Query the lakehouse in Dremio
 

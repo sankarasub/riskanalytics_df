@@ -58,9 +58,15 @@ This page describes what each major file/folder is used for and how to configure
 
 ### Operations scripts
 
-- `scripts/run_risk_analytics_pipeline.ps1`: end-to-end scripted execution.
-- `scripts/run_local_python_no_airflow.py`: local Python execution path.
-- `scripts/health_check.py`: service and deep data checks.
+Purpose, prerequisites, and step-by-step behavior for each script are documented in
+[Scripts Reference](scripts-reference.md).
+
+- `scripts/run_risk_analytics_pipeline.ps1`: end-to-end scripted execution through Airflow, including
+  DAG registration preflight, run waits, and final validation.
+- `scripts/run_local_python_no_airflow.py`: the same flow without Airflow, plus previews and a run report.
+- `scripts/run_manual_pipeline_sequence.ps1`: STAGE/ODS/metrics jobs only, for iterating on YAML changes.
+- `scripts/health_check.py`: service reachability probes plus an optional Iceberg query.
+- `scripts/validate_pipeline_status.py`: Airflow DAG inventory, Nessie, and ODS data validation from the host.
 - `scripts/validate_dags.py`: parses the DAG folder with a real `DagBag` and asserts the expected DAG ids.
 
 ### Tests and docs

@@ -1,11 +1,40 @@
-"""Run the full Risk Analytics flow from local Python without Airflow."""
+"""Run the full Risk Analytics flow from local Python, without Airflow.
+
+Why this script exists
+----------------------
+The Airflow DAGs are the production entry point, but debugging a transformation
+through the scheduler is slow: you pay DAG parsing, pool slots, and container
+logs for every iteration. This script executes exactly the same job entrypoints
+the DAGs call (`jobs/bootstrap.py`, `jobs/run_source_to_ods_step.py`,
+`jobs/run_risk_pipeline.py`) as plain subprocesses against Spark Connect, so a
+full bootstrap-to-metrics run is reproducible from one command with a debugger
+attached and no Airflow involved.
+
+What it does, in order
+----------------------
+1. Optionally starts Docker (`--docker-mode fresh|reuse|none`); the lakehouse
+   services (Spark Connect, Nessie, SeaweedFS) still have to run somewhere.
+2. Bootstraps the catalog: creates every table and seeds the source data.
+3. Runs STAGE then ODS for the selected source(s). All four entities are passed
+   to a single process per layer, so each layer costs one Spark session instead
+   of one per entity.
+4. Prints row counts and a top-5 preview per ODS table.
+5. Runs the risk pipeline (`--data-model source-to-ods`) with a generated run id.
+6. Prints the `risk_metrics` count and top 5 rows for the as-of date.
+7. Writes a markdown run report under `--run-info-dir` (`--skip-run-info` opts
+   out) so a local run leaves the same evidence trail as a scheduled one.
+
+Related scripts: `scripts/run_risk_analytics_pipeline.ps1` (same flow, but
+through Airflow on Windows) and `scripts/run_manual_pipeline_sequence.ps1` (the
+stage/ODS steps only, no bootstrap or reporting).
+"""
 from __future__ import annotations
 
 import argparse
 import os
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +62,7 @@ def run_command(command: list[str], env: dict[str, str], cwd: Path = REPO_ROOT) 
 
 
 def docker_startup(mode: str, env: dict[str, str]) -> None:
+    """Bring the platform up: ``fresh`` rebuilds from scratch, ``reuse`` keeps volumes."""
     if mode == "fresh":
         run_command(["docker", "compose", "down", "-v"], env)
         run_command(["docker", "compose", "up", "--build", "-d"], env)
@@ -48,6 +78,7 @@ def docker_startup(mode: str, env: dict[str, str]) -> None:
 
 
 def run_bootstrap(python_executable: str, as_of_date: str, env: dict[str, str]) -> None:
+    """Create every namespace/table and seed source data (same job as ra_createtables_and_data)."""
     run_command(
         [
             python_executable,
@@ -62,6 +93,7 @@ def run_bootstrap(python_executable: str, as_of_date: str, env: dict[str, str]) 
 
 
 def run_source_to_ods(python_executable: str, as_of_date: str, source: str, env: dict[str, str]) -> None:
+    """Run the YAML-driven STAGE then ODS steps for one source across all entities."""
     step_runner = str(REPO_ROOT / "jobs" / "run_source_to_ods_step.py")
     source_b_params = []
     if source == "sourceb":
@@ -93,6 +125,7 @@ def run_source_to_ods(python_executable: str, as_of_date: str, source: str, env:
 
 
 def print_top5_ods() -> dict[str, int]:
+    """Preview each ODS table and return its row count for the run report."""
     spark = create_spark_session("local-ods-check")
     counts: dict[str, int] = {}
     try:
@@ -107,6 +140,7 @@ def print_top5_ods() -> dict[str, int]:
 
 
 def run_risk_pipeline(python_executable: str, as_of_date: str, env: dict[str, str]) -> str:
+    """Evaluate risk metrics from ODS data (same job as ra_riskmetrics_eval_ods)."""
     run_id = f"local-manual-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     run_command(
         [
@@ -125,6 +159,7 @@ def run_risk_pipeline(python_executable: str, as_of_date: str, env: dict[str, st
 
 
 def print_top5_risk_output(as_of_date: str) -> int:
+    """Preview the published metrics and return the row count for the as-of date."""
     spark = create_spark_session("local-risk-output-check")
     try:
         print(f"\n=== risk_metrics count for {as_of_date} ===")
@@ -159,6 +194,7 @@ def write_run_report(
     ods_counts: dict[str, int],
     risk_row_count: int,
 ) -> Path:
+    """Write a markdown record of the run parameters and count-level validation."""
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / f"local_no_airflow_run_{run_timestamp}.md"
 
@@ -247,7 +283,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    started_at = datetime.utcnow()
+    started_at = datetime.now(UTC)
     run_timestamp = started_at.strftime("%Y%m%d_%H%M%S")
 
     env = os.environ.copy()
@@ -276,14 +312,14 @@ def main() -> int:
     run_id = run_risk_pipeline(args.python_executable, args.as_of_date, env)
     risk_row_count = print_top5_risk_output(args.as_of_date)
 
-    finished_at = datetime.utcnow()
+    finished_at = datetime.now(UTC)
     duration_seconds = int((finished_at - started_at).total_seconds())
 
     report_path: Path | None = None
     if not args.skip_run_info:
         run_meta = {
-            "started_at_utc": started_at.isoformat(timespec="seconds") + "Z",
-            "finished_at_utc": finished_at.isoformat(timespec="seconds") + "Z",
+            "started_at_utc": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "finished_at_utc": finished_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "duration_seconds": duration_seconds,
             "as_of_date": args.as_of_date,
             "docker_mode": args.docker_mode,
@@ -297,7 +333,7 @@ def main() -> int:
             output_dir=REPO_ROOT / args.run_info_dir,
             run_timestamp=run_timestamp,
             run_meta=run_meta,
-                ods_counts=ods_counts,
+            ods_counts=ods_counts,
             risk_row_count=risk_row_count,
         )
 
