@@ -135,11 +135,41 @@ $env:SPARK_SUBMIT_POOL_SLOTS = "4"
 docker compose up -d airflow-init
 ```
 
+### Airflow shows pre-refactor `risk_analytics_*` DAGs
+
+The repository only ships the 27 `ra_*` DAGs. Older names such as
+`risk_analytics_create_tables_and_load_data` are metadata rows left in the Airflow database from a
+previous revision; they have no DAG file and cannot run. Two things cause them to reappear:
+
+1. The checkout mounted into the containers is stale. Run `git pull`, then `docker compose up -d`
+   and confirm `docker compose ps airflow-triggerer` exists (added with the deferrable waits).
+2. The metadata rows survived the DAG file removal. Delete them:
+
+```powershell
+.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -RemoveLegacyDags
+# or, per DAG:
+docker compose exec airflow-webserver airflow dags delete -y risk_analytics_create_tables_and_load_data
+```
+
+The helper script refuses to trigger anything until every expected `ra_*` DAG is registered, so a
+stale checkout fails fast instead of triggering a DAG that no longer exists.
+
+### `TABLE_OR_VIEW_NOT_FOUND: nessie.risk_analytics_ods.risk_metrics`
+
+The validation query ran before the pipeline finished. `ra_createtables_and_data` only fires
+`ra_stage_to_ods_orchestration`, which fires `ra_riskmetrics_eval_ods`, so the ODS tables appear
+minutes after the trigger call returns. The helper script waits for all three runs (bounded by
+`-WaitTimeoutMinutes`, default 60); if you passed `-SkipPipelineWait`, re-run the check afterwards:
+
+```powershell
+docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py --host host.docker.internal --postgres-host postgres --check-iceberg
+```
+
 ### Validate DAG parsing without the platform
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path
-.\.venv\Scripts\python.exe scriptsalidate_dags.py
+.\.venv\Scripts\python.exe scripts\validate_dags.py
 ```
 
 ## Spark and Data Troubleshooting
