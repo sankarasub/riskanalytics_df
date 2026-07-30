@@ -8,9 +8,10 @@ Local, production-oriented development scaffold for a Risk Analytics (Risk Analy
 ## Documentation index
 
 - [README.md](README.md): Quick start, architecture, service access, and operational commands.
-- [docs/framework_overview.md](docs/framework_overview.md): Detailed architecture, execution flow, Kafka usage, and step-by-step run examples.
-- [docs/project-reference.md](docs/project-reference.md): Canonical end-to-end project reference including architecture, runtime flow, and repository structure.
-- [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md): component, pipeline, orchestration, and streaming diagrams (also published as [Architecture Diagrams](docs/architecture-diagram.md)).
+- [docs/architecture.md](docs/architecture.md): system design, tech stack, and every architecture diagram (component, orchestration, streaming, YAML execution, branch isolation).
+- [docs/data-model-risk-metrics.md](docs/data-model-risk-metrics.md): table contracts per layer, Kafka topic-to-table mapping, lineage, and metric formulas.
+- [docs/project-reference.md](docs/project-reference.md): what every file in the repository is for, plus the configuration guide.
+- [docs/scripts-reference.md](docs/scripts-reference.md): why each `scripts/` entry exists, when to use it, and its steps.
 - [docs/dependency-cache-guide.md](docs/dependency-cache-guide.md): Where dependencies are downloaded/cached and how to inspect underlying Docker files and volumes.
 
 ## Documentation website
@@ -21,7 +22,7 @@ You can browse project markdowns as a website using MkDocs.
 
 Quick links:
 
-- Framework overview: [docs/framework_overview.md](docs/framework_overview.md)
+- Framework overview: [docs/architecture.md](docs/architecture.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Runbooks: [docs/runbooks.md](docs/runbooks.md)
 

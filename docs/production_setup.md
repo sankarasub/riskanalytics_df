@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Runbook](runbooks.md) | [Repository Map](project-reference.md) | [Dependency Guide](dependency-cache-guide.md) | [Troubleshooting](troubleshooting.md)
+> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Runbook](runbooks.md) | [File Guide](project-reference.md) | [Dependency Guide](dependency-cache-guide.md) | [Troubleshooting](troubleshooting.md)
 
 ## Production Delivery Model
 

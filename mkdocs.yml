@@ -1,18 +1,38 @@
 site_name: Risk Analytics Lakehouse Docs
 site_description: Documentation site for the Risk Analytics lakehouse project
 site_url: https://sansubrm.github.io/data_factory/
+repo_url: https://github.com/sankarasub/riskanalytics_df
+repo_name: sankarasub/riskanalytics_df
+edit_uri: edit/main/docs/
 theme:
   name: material
   features:
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.tracking
+    - toc.follow
     - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
 plugins:
   - search
 validation:
   links:
     not_found: ignore
+    anchors: warn
 markdown_extensions:
   - admonition
   - attr_list
@@ -28,23 +48,21 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.snippets:
-      base_path:
-        - .
-      check_paths: true
 nav:
-  - Overview of This Project: index.md
-  - Framework Overview, System Design & Tech Stack: architecture.md
-  - Architecture Diagrams: architecture-diagram.md
-  - Data Model and Risk Metrics: data-model-risk-metrics.md
-  - Platform Interfaces and Operations: platform-interfaces-and-operations.md
-  - Runbook and Local Execution: runbooks.md
-  - Scripts Reference: scripts-reference.md
-  - Production Setup: production_setup.md
-  - Testing: testing.md
-  - Repository Map & Configuration Guide: project-reference.md
-  - Metadata-Driven Architecture and YAML Patterns: metadata-driven-architecture.md
-  - Dependency Download, Cache, and Images Guide: dependency-cache-guide.md
-  - Project README: readme.md
-  - Troubleshooting: troubleshooting.md
-
+  - Start Here:
+      - Overview of This Project: index.md
+      - Runbook and Local Execution: runbooks.md
+      - Scripts Reference: scripts-reference.md
+      - Troubleshooting: troubleshooting.md
+  - Design and Data:
+      - Framework Overview, System Design & Tech Stack: architecture.md
+      - Data Model and Risk Metrics: data-model-risk-metrics.md
+      - Metadata-Driven Architecture and YAML Patterns: metadata-driven-architecture.md
+  - Operate:
+      - Platform Interfaces and Operations: platform-interfaces-and-operations.md
+      - Production Setup: production_setup.md
+      - Dependency Download, Cache, and Images Guide: dependency-cache-guide.md
+  - Develop:
+      - Repository File Guide & Configuration: project-reference.md
+      - Testing: testing.md
+      - Project README: readme.md

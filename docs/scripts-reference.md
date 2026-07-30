@@ -70,6 +70,13 @@ Steps:
 .\.venv\Scripts\python.exe scripts\run_local_python_no_airflow.py --as-of-date 2026-07-18 --source-mode both
 ```
 
+The run report makes a manual run auditable: it lands in `logs/run-info` as
+`local_no_airflow_run_YYYYMMDD_HHMMSS.md` (override with `--run-info-dir`) and records the started and
+finished timestamps, total duration, `as_of_date`, `docker_mode`, whether Source B was included,
+`spark_remote`, `nessie_uri`, `python_executable`, the generated `run_id`, per-table row counts, and
+the `risk_metrics` count for the date. Comparing two reports is the fastest way to see what a YAML
+change did.
+
 ## `run_manual_pipeline_sequence.ps1`
 
 The smallest reproduction of the Airflow fan-out. When a YAML transformation misbehaves you rarely

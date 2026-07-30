@@ -1,79 +1,199 @@
-# Repository Map and Configuration Guide
+# Repository File Guide and Configuration
 
-> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Runbook](runbooks.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
+> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Data Model](data-model-risk-metrics.md) | [Scripts](scripts-reference.md) | [Runbook](runbooks.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
 
-This page describes what each major file/folder is used for and how to configure behavior safely.
+This page is the file-level inventory: every tracked file or folder, why it exists, and when you
+touch it. It then explains the configuration surface. Use
+[Architecture](architecture.md) for how the pieces interact and
+[Scripts Reference](scripts-reference.md) for the operational scripts in detail.
 
-## Repository Map
+## Root Files
 
-### Root
+| File | Purpose | When you touch it |
+| --- | --- | --- |
+| `README.md` | Repository entry point: quick start, service URLs, documentation index. | Whenever the quick start or documentation set changes. |
+| `docker-compose.yml` | Defines every service, image, port, volume, and environment variable of the local platform. | Adding a service, changing a port, or changing an environment contract. |
+| `mkdocs.yml` | Documentation site navigation, theme, and Markdown extensions (Mermaid, snippets). | Adding, renaming, or removing a page under `docs/`. |
+| `config/platform.yaml` | Default catalog/storage/risk configuration consumed by every job. | Changing risk assumptions, namespaces, or the default pipeline path. |
+| `setup_venv.py` | Creates the host `.venv` and installs every requirement group in one resolve, then verifies local-mode imports. | Changing host dependencies or the bootstrap flow. |
+| `requirements-lock.txt` | Snapshot of a known-good resolved dependency set for reproducible host installs. | Refreshing pins after a dependency change. |
+| `ruff.toml` | Lint rules, per-file ignores, and the reasons for each ignore. | Adding a file that legitimately needs an exception. |
+| `mypy.ini` | Type-check scope and per-module strictness. | Adding a module to type checking. |
+| `.env.example` | Template for `.env`: S3 credentials, Airflow UID, and Airflow admin user. Copy it; never commit `.env`. | Adding a new runtime secret or setting. |
+| `.gitignore` | Keeps build output, local data volumes, secrets, and caches out of the repository. | Adding generated artefacts. |
+| `.gitattributes` | Normalizes line endings, which matters because the runner scripts are PowerShell. | Rarely. |
 
-- `docker-compose.yml`: full local platform orchestration and service wiring.
-- `README.md`: repository-level guide.
-- `mkdocs.yml`: documentation site nav and rendering config.
-- `setup_venv.py`: host Python virtual-environment bootstrap and optional library upgrade flow (`--update-libraries`).
-- `requirements-lock.txt`: locked dependency snapshot.
-- `requirements/dev.txt`: pinned lint/type tooling (`ruff`, `mypy`, type stubs).
-- `ruff.toml` and `mypy.ini`: lint and type-check configuration used locally and in CI.
-- `.github/workflows/ci.yml`: ruff, mypy, unit tests, `docker compose config`, and Airflow DAG parsing.
+## Requirements (`requirements/`)
 
-### Orchestration
+Each image installs only its own group, so a UI change cannot break Spark. Cross-cutting pins
+(`grpcio`, `protobuf`, `pyarrow`) are kept identical across groups on purpose - Spark Connect fails
+at runtime when the client and server disagree.
 
-- `airflow/dags/ra_common.py`: shared DAG constants and `spark-submit` command builders.
-- `airflow/dags/ra_createtables_and_data.py`: bootstrap DAG (create tables, seed sources, trigger orchestration).
-- `airflow/dags/ra_stage_jobs.py`: factory for the eight `ra_<source>_<entity>_stage` DAGs.
-- `airflow/dags/ra_ods_jobs.py`: factory for the eight `ra_<source>_<entity>_ods` DAGs.
-- `airflow/dags/ra_stage_to_ods_orchestration.py`: STAGE -> ODS -> risk metrics orchestration; one TaskGroup per source/entity, all eight running concurrently with deferred waits.
-- `airflow/dags/ra_riskmetrics_eval_ods.py`: final risk metric evaluation DAG.
-- `airflow/dags/ra_kafka_streaming.py`: factory for the eight `ra_kafka_<entity>_stage` / `ra_kafka_<entity>_ods` streaming DAGs.
+| File | Installed into |
+| --- | --- |
+| `requirements/spark.txt` | Spark master/worker/connect and the streaming consumer image. |
+| `requirements/airflow.txt` | Airflow webserver, scheduler, triggerer, and init (pins `apache-airflow` so the Kafka provider cannot pull Airflow 3). |
+| `requirements/ui.txt` | Streamlit UIs and the FastAPI operations API. |
+| `requirements/notebook.txt` | JupyterLab image. |
+| `requirements/docs.txt` | MkDocs and the Material theme, used locally and by the docs workflows. |
+| `requirements/dev.txt` | `ruff`, `mypy`, and type stubs; installed on the host by `setup_venv.py`. |
 
-### Jobs
+## Airflow DAGs (`airflow/dags/`)
 
-- `jobs/bootstrap.py`: table creation and seed loading.
-- `jobs/run_source_to_ods_step.py`: parameterized stage/ODS step execution; `--entity` can be repeated to run several entities in one Spark session.
-- `jobs/run_risk_pipeline.py`: final risk pipeline orchestration and publish flow.
-- `jobs/risk_pipeline.py`: core Python implementation for risk metric derivation.
-- `jobs/kafka_entity_consumer.py`: streaming ingest paths for deals, customer, asset, and collateral topics.
-- `jobs/execute_pipeline.py`: ad-hoc runner for a single YAML pipeline definition.
+The folder ships 27 DAGs; the factories generate most of them, so the file count stays small. See
+[Batch Orchestration Flow](architecture.md#batch-orchestration-flow) for the generated DAG ids.
 
-### Runtime package
+| File | Purpose |
+| --- | --- |
+| `ra_common.py` | Single source of truth for entities, sources, namespaces, pool name, and the `spark-submit` command builders every DAG uses. Change a job argument here, not in seven DAG files. |
+| `ra_createtables_and_data.py` | Bootstrap DAG: create namespaces and tables, seed deterministic source data, then trigger the orchestration DAG. |
+| `ra_stage_jobs.py` | Factory for the eight `ra_<source>_<entity>_stage` DAGs (one parameterized STAGE load each). |
+| `ra_ods_jobs.py` | Factory for the eight `ra_<source>_<entity>_ods` DAGs (one parameterized ODS merge each). |
+| `ra_stage_to_ods_orchestration.py` | Fans out into one TaskGroup per source/entity pair, all eight concurrent with deferred waits, then triggers the metrics DAG. |
+| `ra_riskmetrics_eval_ods.py` | Runs the branch-isolated risk job and publishes `risk_metrics`. |
+| `ra_kafka_streaming.py` | Factory for the eight `ra_kafka_<entity>_stage` / `ra_kafka_<entity>_ods` DAGs, including the entity-filtered `AwaitMessageSensor`. |
 
-- `risk_analytics/config.py`: config loader and environment override behavior.
-- `risk_analytics/spark.py`: Spark session creation (local/master/connect modes).
-- `risk_analytics/nessie.py`: Nessie reference/branch merge interactions.
-- `risk_analytics/yaml_executor.py`: YAML pipeline validation, preview, execution.
-- `risk_analytics/transformations/`: supported step implementations.
-- `risk_analytics/kafka_events.py`: trigger payload builder and the `AwaitMessageSensor` match function.
+## Spark Jobs (`jobs/`)
 
-### Transform metadata
+Every job is a `spark-submit` entry point with an explicit CLI, so Airflow, the scripts, and a
+developer shell all invoke the same code path.
 
-- `transform/`: YAML pipeline definitions.
-- `transform/source_to_ods/`: source-to-ODS and risk pipeline YAML contracts.
+| File | Purpose |
+| --- | --- |
+| `bootstrap.py` | Creates all table contracts and loads the deterministic seed data from `data/sourcea`. Idempotent. |
+| `create_tables.py` | Holds the DDL for every table (source, stage, ODS, metrics) that `bootstrap.py` executes. |
+| `run_source_to_ods_step.py` | Runs one STAGE or ODS step for a source/entity/date; `--entity` is repeatable so several entities share one Spark session. |
+| `run_risk_pipeline.py` | Creates the Nessie run branch, executes the risk metrics YAML, merges to `main`, and publishes the completion event. |
+| `kafka_entity_consumer.py` | Structured Streaming consumer behind the `kafka-entity-stream` service: lands ingest topics into source tables and emits trigger events. |
+| `execute_pipeline.py` | Ad-hoc runner for any YAML pipeline file, used for validation and previews outside orchestration. |
+| `__init__.py` | Makes `jobs` importable so `bootstrap.py` can import the shared DDL. |
 
-### Interfaces
+## Runtime Package (`risk_analytics/`)
 
-- `ui/business_app.py`: business dashboard.
-- `ui/developer_app.py`: developer dashboard.
-- `api/app.py`: links portal plus operational endpoints (`/health`, `/tables`, `/pipeline/execute`) and YAML pipeline endpoints.
+| File | Purpose |
+| --- | --- |
+| `config.py` | Loads `config/platform.yaml`, applies environment overrides, and resolves table names. |
+| `spark.py` | Builds the Spark session for local, cluster, or Spark Connect mode with the Iceberg/Nessie/S3 settings. |
+| `nessie.py` | Creates and merges run branches and reads reference state. |
+| `yaml_executor.py` | The pipeline engine: renders templates, validates structure, loads sources, dispatches steps, writes targets, and returns row counts. |
+| `kafka_events.py` | Builds the trigger payload and provides the `AwaitMessageSensor` match function (importable because the triggerer resolves it by import string). |
+| `transformations/components.py` | `execute_component()` dispatcher that routes a YAML step to its handler. |
+| `transformations/relational.py` | `join` and `lookup` components. |
+| `transformations/aggregation.py` | `rollup`, `normalize`, `dedup`, and other shape-changing components. |
+| `transformations/shaping.py` | `filter` and `reformat` components. |
+| `transformations/expressions.py` | Parses the YAML expression syntax into Spark columns. |
+| `transformations/common.py` | Shared helpers and the component error types. |
 
-### Operations scripts
+## Transformation Metadata (`transform/`)
 
-Purpose, prerequisites, and step-by-step behavior for each script are documented in
+Pipeline logic lives here as data, so a business rule change is a YAML review rather than a code
+change. See [Metadata-Driven Architecture](metadata-driven-architecture.md) for the authoring rules.
+
+| Path | Purpose |
+| --- | --- |
+| `transform/source_to_ods/stage_<entity>_<source>.yaml` | Eight active STAGE pipelines: normalize one source into `nessie.risk_analytics_stage.<entity>_stage_<source>`. |
+| `transform/source_to_ods/ods_<entity>_<source>.yaml` | Eight active ODS pipelines: merge a stage table into the standardized `nessie.risk_analytics_ods.<entity>` contract. |
+| `transform/source_to_ods/risk_metrics_pipeline_source_to_ods.yaml` | The active risk metrics pipeline; the only place the metric formulas are implemented. |
+| `transform/risk_metrics_pipeline.yaml` | Legacy metrics pipeline over the `*_canonical` tables, kept only for the `--data-model legacy` flag. See [Legacy artifacts](#legacy-and-transitional-artifacts). |
+| `transform/<entity>_Source<A\|B>_transform.yaml` | Ten legacy source transforms writing the legacy `*_stg` tables. Not referenced by any DAG or script. |
+
+## Interfaces (`ui/`, `api/`)
+
+| File | Purpose |
+| --- | --- |
+| `ui/business_app.py` | Business dashboard (`:8501`): published metrics, sidebar service health, per-entity Kafka state, and run-state totals. |
+| `ui/developer_app.py` | Developer control plane (`:8502`): DAG catalog joined to live Airflow state, per-DAG run inspection and trigger, YAML validate/preview, `/tables`, and pipeline execution. |
+| `ui/common.py` | Shared adapters (Spark Connect, Airflow REST, Nessie, catalog metadata) kept out of the presentation code so both UIs behave identically. |
+| `api/app.py` | FastAPI operations API (`:8000`): the links portal plus `/health`, `/tables`, `/pipeline/execute`, and the YAML validation endpoints. |
+
+## Docker (`docker/`)
+
+| Path | Purpose |
+| --- | --- |
+| `docker/spark/Dockerfile` | Spark image used by master, worker, Spark Connect, and the Kafka consumer. |
+| `docker/airflow/Dockerfile` | Airflow image with the providers and the project package installed. |
+| `docker/ui/Dockerfile` | Shared image for both Streamlit UIs and the FastAPI API. |
+| `docker/notebook/Dockerfile` | JupyterLab image with a matching PySpark client. |
+| `docker/seaweedfs/s3.json` | S3 bucket and access configuration for the local warehouse. |
+| `docker/seaweedfs/iam.json` | Identity/permission configuration for the SeaweedFS S3 API. |
+
+## Operations Scripts (`scripts/`)
+
+Each script carries a header stating why it exists and the steps it performs; the full write-up is in
 [Scripts Reference](scripts-reference.md).
 
-- `scripts/run_risk_analytics_pipeline.ps1`: end-to-end scripted execution through Airflow, including
-  DAG registration preflight, run waits, and final validation.
-- `scripts/run_local_python_no_airflow.py`: the same flow without Airflow, plus previews and a run report.
-- `scripts/run_manual_pipeline_sequence.ps1`: STAGE/ODS/metrics jobs only, for iterating on YAML changes.
-- `scripts/health_check.py`: service reachability probes plus an optional Iceberg query.
-- `scripts/validate_pipeline_status.py`: Airflow DAG inventory, Nessie, and ODS data validation from the host.
-- `scripts/validate_dags.py`: parses the DAG folder with a real `DagBag` and asserts the expected DAG ids.
+| File | Purpose |
+| --- | --- |
+| `run_risk_analytics_pipeline.ps1` | End-to-end run through Airflow: platform startup, DAG registration preflight, trigger, bounded wait, validation. |
+| `run_local_python_no_airflow.py` | The same flow without Airflow, using Docker services and the host virtual environment, plus previews and a markdown run report. |
+| `run_manual_pipeline_sequence.ps1` | STAGE, ODS, and metrics jobs only, one Spark session per layer, for iterating on YAML changes. |
+| `health_check.py` | Probes every service endpoint (and optionally queries `risk_metrics`) because "container up" is not "service ready". |
+| `validate_pipeline_status.py` | Diffs registered DAGs against the shipped 27, warns on legacy metadata and paused DAGs, and validates Nessie and ODS data. |
+| `validate_dags.py` | Parses the DAG folder with a real `DagBag` and asserts the expected DAG ids; run this before pushing DAG changes. |
 
-### Tests and docs
+## Tests (`tests/`)
 
-- `tests/`: unit and behavior tests.
-- `docs/`: documentation sources.
-- `site/`: built documentation output.
+Run with `python -m unittest discover -s tests -p "test_*.py" -t .`; see [Testing](testing.md).
+
+| File | Covers |
+| --- | --- |
+| `support.py` | Fake Spark/DataFrame doubles so transformation logic is testable without a JVM. |
+| `test_yaml_executor.py` | Template rendering, validation errors, source loading, and step dispatch. |
+| `test_run_source_to_ods_step.py` | STAGE/ODS argument handling, including the repeatable `--entity` flag. |
+| `test_run_risk_pipeline.py` | Branch creation, merge, event publication, and the metrics pipeline selection. |
+| `test_bootstrap.py` | DDL coverage and deterministic seeding. |
+| `test_config.py` | Configuration defaults and environment overrides. |
+| `test_spark_session.py` | Session construction per execution mode. |
+| `test_nessie.py` | Reference and merge behavior, including failure fallbacks. |
+| `test_kafka_events.py` | Trigger payload shape and the entity match function used by the sensors. |
+| `test_airflow_ra_dags.py` | Builds the DAGs and asserts ids, structure, and dependency edges. |
+| `test_airflow_dockerfile.py` | Guards the pins the Airflow image depends on. |
+| `test_api_triggers.py` | Operations API endpoints and DAG trigger payloads. |
+| `test_health_check.py` | Probe results and exit codes. |
+| `test_pipeline_script.py` | The PowerShell runner's DAG coverage and ordering, and fails if any file reintroduces a legacy DAG id. |
+
+## Documentation (`docs/`)
+
+| File | Purpose |
+| --- | --- |
+| `index.md` | Site landing page, audience routing, and documentation map. |
+| `architecture.md` | The single architecture reference: system design, tech stack, and all diagrams. |
+| `data-model-risk-metrics.md` | Layer contracts, Kafka topic-to-table mapping, lineage, and metric formulas. |
+| `platform-interfaces-and-operations.md` | Every interface (UIs, API, Airflow, Dremio, Kafka UI, JupyterLab) with example payloads and commands. |
+| `runbooks.md` | Setup, first run, offline run, and the local no-Airflow path. |
+| `scripts-reference.md` | Why each `scripts/` entry exists, when to use it, and its steps. |
+| `metadata-driven-architecture.md` | How to author and validate YAML pipelines. |
+| `production_setup.md` | What to change for a non-local deployment. |
+| `testing.md` | Test layout, how to run the suite, and the validation gates. |
+| `troubleshooting.md` | Symptom-to-fix table for the failures this platform actually produces. |
+| `dependency-cache-guide.md` | Where dependencies are downloaded and cached, and how to inspect the volumes. |
+| `project-reference.md` | This page. |
+| `readme.md` | Recommended reading order inside the site. |
+
+## Data, Notebooks, and Editor Support
+
+| Path | Purpose |
+| --- | --- |
+| `data/sourcea/*.json`, `data/sourceb/*` | Small deterministic seed files so a fresh clone produces identical, reviewable metrics. |
+| `notebooks/risk_analytics_spark_connect_nessie_queries.ipynb` | Query the published tables through Spark Connect. |
+| `notebooks/risk_analytics_operational_checks.ipynb` | Notebook-based service and data checks. |
+| `.vscode/tasks.json` | Curated debug tasks: run the pipeline, validate DAGs, tail service logs, query metrics, serve the docs. |
+| `.vscode/settings.json` | Python interpreter selection for the workspace. |
+| `.github/workflows/ci.yml` | Lint, type-check, unit tests, `docker compose config`, and DAG parsing on every push and PR. |
+| `.github/workflows/docs-pages.yml` | Builds and publishes the MkDocs site. |
+| `.github/workflows/docs-pr-check.yml` | Builds the docs on pull requests so a broken link fails the PR. |
+
+## Generated and Runtime Paths (Not in Git)
+
+These appear locally but are ignored on purpose; delete them freely.
+
+| Path | Produced by |
+| --- | --- |
+| `site/` | `mkdocs build`. |
+| `.venv/` | `setup_venv.py`. |
+| `logs/run-info/` | Markdown run reports from `run_local_python_no_airflow.py`. |
+| `postgres-data/`, `seaweed-data/`, `dremio-data/`, `spark-ivy-cache/` | Docker volume mounts for service state and the Spark package cache. |
+| `__pycache__/`, `.pytest_cache/` | Python tooling. |
 
 ## Configuration Files and What They Control
 
@@ -137,7 +257,22 @@ Update environment URL variables for `links-api` service and corresponding API/U
 
 ## Legacy and Transitional Artifacts
 
-Some legacy files and paths may remain while source-to-ODS migration is completed. Use ODS and `risk_metrics` contracts as the primary published data path.
+The active published path is STAGE -> ODS -> `nessie.risk_analytics_ods.risk_metrics`. A pre-refactor
+"legacy" data model still ships alongside it, and it is worth knowing exactly what belongs to it so
+you do not debug the wrong pipeline:
+
+| Artifact | State |
+| --- | --- |
+| `transform/<entity>_Source<A\|B>_transform.yaml` (10 files) | Write the legacy `nessie.risk_analytics.*_stg` tables. No DAG, script, or test runs them. |
+| `transform/risk_metrics_pipeline.yaml` | Reads the `*_canonical` tables. Only reachable through `run_risk_pipeline.py --data-model legacy`. |
+| `*_canonical` and `*_stg` tables in `nessie.risk_analytics` | Created by `jobs/create_tables.py` but never populated by the active flow, so a legacy run returns zero rows. |
+| `data/sourcea/trades.json`, `data/sourcea/trade_product.json` | Seed the legacy `trades` / `trade_product` source tables; the active model uses `deals`. |
+| `data/sourceb/product`, `data/sourceb/trans` | Source B inputs for the legacy product/trans transforms. |
+
+`--data-model legacy` is still the default flag value of `jobs/run_risk_pipeline.py`, while every DAG
+and script passes `--data-model source-to-ods` explicitly. If you invoke the job by hand, pass the
+flag. Removing the legacy model entirely (YAMLs, DDL, seeds, and the flag) is a safe follow-up once
+you are sure nothing external reads those tables.
 
 ## Production Deployment Reference
 

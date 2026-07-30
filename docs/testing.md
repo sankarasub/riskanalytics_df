@@ -1,6 +1,6 @@
 # Test Coverage
 
-> Quick links: [Overview](index.md) | [Runbook](runbooks.md) | [Production Setup](production_setup.md) | [Repository Map](project-reference.md) | [Troubleshooting](troubleshooting.md)
+> Quick links: [Overview](index.md) | [Runbook](runbooks.md) | [Production Setup](production_setup.md) | [File Guide](project-reference.md) | [Troubleshooting](troubleshooting.md)
 
 The repository has a unit-test suite built with the Python standard library `unittest` module, plus lint, type, DAG-parse, and docs gates that run in CI. The tests are designed to stay lightweight and avoid requiring a live Spark cluster during unit runs.
 
@@ -16,7 +16,8 @@ The current coverage includes:
 - Pipeline orchestration in [jobs/run_risk_pipeline.py](../jobs/run_risk_pipeline.py)
 - The multi-entity layer runner in [jobs/run_source_to_ods_step.py](../jobs/run_source_to_ods_step.py)
 - Bootstrap table creation and seeding in [jobs/bootstrap.py](../jobs/bootstrap.py)
-- Airflow DAG ids, dependencies, pools, and Kafka sensor wiring in [airflow/dags](../airflow/dags)
+- Airflow DAG ids, dependencies, pools, and Kafka sensor wiring in `airflow/dags/` (see the
+  [Repository File Guide](project-reference.md#airflow-dags-airflowdags))
 - Operations API request handling in [api/app.py](../api/app.py)
 
 ## What Each Test Verifies
