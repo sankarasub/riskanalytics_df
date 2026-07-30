@@ -2,6 +2,10 @@ version: 1
 name: stage_collateral_sourcea
 
 sources:
+  - name: collateral_file
+    type: file
+    format: json
+    path: '{{collateral_sourcea_path}}'
   - name: collateral_src
     type: table
     table: nessie.risk_analytics.collateral
@@ -11,7 +15,7 @@ sources:
 steps:
   - id: normalize_collateral_sourcea
     type: reformat
-    input: collateral_src
+    input: collateral_file
     operations:
       - op: add_column
         name: source_system

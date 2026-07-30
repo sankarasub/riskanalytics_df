@@ -15,6 +15,7 @@ def build_table_ddl(config: dict) -> dict[str, str]:
     legacy_namespace = catalog.get("namespace", "risk_analytics")
     stage_namespace = catalog.get("stage_namespace", "risk_analytics_stage")
     ods_namespace = catalog.get("ods_namespace", "risk_analytics_ods")
+    execution_mode = config.get("execution_mode", "docker")
 
     ddl: dict[str, str] = {
         "namespace": f"CREATE NAMESPACE IF NOT EXISTS {catalog_name}.{legacy_namespace}",
@@ -22,128 +23,43 @@ def build_table_ddl(config: dict) -> dict[str, str]:
         "namespace_ods": f"CREATE NAMESPACE IF NOT EXISTS {catalog_name}.{ods_namespace}",
     }
 
-    # Legacy source tables (kept during migration).
-    ddl["customer"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'customer')} (
-        customer_id STRING, customer_name STRING, legal_entity_id STRING, rating STRING,
-        country_code STRING, entity_type STRING, active_flag BOOLEAN, as_of_date DATE
-    ) USING iceberg PARTITIONED BY (days(as_of_date))"""
-    ddl["asset"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'asset')} (
-        asset_id STRING, isin STRING, asset_class STRING, issuer STRING, currency STRING,
-        market_value DECIMAL(20,2), valuation_date DATE
-    ) USING iceberg PARTITIONED BY (asset_class, days(valuation_date))"""
-    ddl["collateral"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'collateral')} (
-        collateral_id STRING, customer_id STRING, asset_id STRING, agreement_id STRING,
-        collateral_type STRING, quantity DECIMAL(20,6), market_value DECIMAL(20,2), currency STRING,
-        valuation_date DATE
-    ) USING iceberg PARTITIONED BY (days(valuation_date))"""
-    ddl["trades"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trades')} (
-        trade_id STRING, customer_id STRING, netting_set_id STRING, product_type STRING,
-        trade_date DATE, maturity_date DATE, currency STRING, notional DECIMAL(20,2),
-        mark_to_market DECIMAL(20,2), status STRING, as_of_date DATE
-    ) USING iceberg PARTITIONED BY (product_type, days(as_of_date))"""
-    ddl["trade_product"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trade_product')} (
-        trade_id STRING, product_type STRING, underlying_id STRING, pay_leg_currency STRING,
-        receive_leg_currency STRING, fixed_rate DECIMAL(12,8), floating_index STRING,
-        strike DECIMAL(20,6), option_type STRING, volatility DECIMAL(10,6),
-        barrier_level DECIMAL(20,6), product_attributes MAP<STRING, STRING>
-    ) USING iceberg PARTITIONED BY (product_type)"""
-    ddl["deals"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'deals')} (
-        deal_id STRING, trade_id STRING, customer_id STRING, asset_id STRING, collateral_id STRING,
-        netting_set_id STRING, product_type STRING, trade_date DATE, maturity_date DATE,
-        currency STRING, notional DECIMAL(20,2), mark_to_market DECIMAL(20,2),
-        status STRING, as_of_date DATE, volatility DECIMAL(10,6),
-        fixed_rate DECIMAL(12,8), strike DECIMAL(20,6), option_type STRING
-    ) USING iceberg PARTITIONED BY (product_type, days(as_of_date))"""
+    # Only create source tables in Docker mode
+    if execution_mode == "docker":
+        ddl["customer"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'customer')} (
+            customer_id STRING, customer_name STRING, legal_entity_id STRING, rating STRING,
+            country_code STRING, entity_type STRING, active_flag BOOLEAN, as_of_date DATE
+        ) USING iceberg PARTITIONED BY (days(as_of_date))"""
+        ddl["asset"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'asset')} (
+            asset_id STRING, isin STRING, asset_class STRING, issuer STRING, currency STRING,
+            market_value DECIMAL(20,2), valuation_date DATE
+        ) USING iceberg PARTITIONED BY (asset_class, days(valuation_date))"""
+        ddl["collateral"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'collateral')} (
+            collateral_id STRING, customer_id STRING, asset_id STRING, agreement_id STRING,
+            collateral_type STRING, quantity DECIMAL(20,6), market_value DECIMAL(20,2), currency STRING,
+            valuation_date DATE
+        ) USING iceberg PARTITIONED BY (days(valuation_date))"""
+        ddl["deals"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'deals')} (
+            deal_id STRING, trade_id STRING, customer_id STRING, asset_id STRING, collateral_id STRING,
+            netting_set_id STRING, product_type STRING, trade_date DATE, maturity_date DATE,
+            currency STRING, notional DECIMAL(20,2), mark_to_market DECIMAL(20,2),
+            status STRING, as_of_date DATE, volatility DECIMAL(10,6),
+            fixed_rate DECIMAL(12,8), strike DECIMAL(20,6), option_type STRING
+        ) USING iceberg PARTITIONED BY (product_type, days(as_of_date))"""
 
-    ddl["risk_metrics"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'risk_metrics')} (
+    # Risk metrics table placement depends on execution mode
+    if execution_mode == "docker":
+        risk_metrics_namespace = legacy_namespace
+    else:
+        risk_metrics_namespace = ods_namespace
+    
+    ddl["risk_metrics"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, risk_metrics_namespace, 'risk_metrics')} (
         risk_run_id STRING, as_of_date DATE, customer_id STRING, netting_set_id STRING,
         gross_exposure DECIMAL(20,2), netting_exposure DECIMAL(20,2),
         collateral_value_after_haircut DECIMAL(20,2), pfe DECIMAL(20,2), var DECIMAL(20,2),
         calculation_timestamp TIMESTAMP, source_branch STRING
     ) USING iceberg PARTITIONED BY (days(as_of_date))"""
 
-    ddl["customer_canonical"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'customer_canonical')} (
-        customer_id STRING, customer_name STRING, legal_entity_id STRING, rating STRING,
-        country_code STRING, entity_type STRING, active_flag BOOLEAN, as_of_date DATE,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (days(as_of_date))"""
-    ddl["asset_canonical"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'asset_canonical')} (
-        asset_id STRING, isin STRING, asset_class STRING, issuer STRING, currency STRING,
-        market_value DECIMAL(20,2), valuation_date DATE, source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (asset_class, days(valuation_date))"""
-    ddl["collateral_canonical"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'collateral_canonical')} (
-        collateral_id STRING, customer_id STRING, asset_id STRING, agreement_id STRING,
-        collateral_type STRING, quantity DECIMAL(20,6), market_value DECIMAL(20,2), currency STRING,
-        valuation_date DATE, source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (days(valuation_date))"""
-    ddl["trades_canonical"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trades_canonical')} (
-        trade_id STRING, customer_id STRING, netting_set_id STRING, product_type STRING,
-        trade_date DATE, maturity_date DATE, currency STRING, notional DECIMAL(20,2),
-        mark_to_market DECIMAL(20,2), status STRING, as_of_date DATE,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (product_type, days(as_of_date))"""
-    ddl["trade_product_canonical"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trade_product_canonical')} (
-        trade_id STRING, product_type STRING, underlying_id STRING, pay_leg_currency STRING,
-        receive_leg_currency STRING, fixed_rate DECIMAL(12,8), floating_index STRING,
-        strike DECIMAL(20,6), option_type STRING, volatility DECIMAL(10,6),
-        barrier_level DECIMAL(20,6), product_attributes MAP<STRING, STRING>,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (product_type)"""
-
-    ddl["customer_sourcea_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'customer_sourcea_stg')} (
-        customer_id STRING, customer_name STRING, legal_entity_id STRING, rating STRING,
-        country_code STRING, entity_type STRING, active_flag BOOLEAN, as_of_date DATE,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (days(as_of_date))"""
-    ddl["customer_sourceb_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'customer_sourceb_stg')} (
-        customer_id STRING, customer_name STRING, legal_entity_id STRING, rating STRING,
-        country_code STRING, entity_type STRING, active_flag BOOLEAN, as_of_date DATE,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (days(as_of_date))"""
-    ddl["asset_sourcea_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'asset_sourcea_stg')} (
-        asset_id STRING, isin STRING, asset_class STRING, issuer STRING, currency STRING,
-        market_value DECIMAL(20,2), valuation_date DATE, source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (asset_class, days(valuation_date))"""
-    ddl["asset_sourceb_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'asset_sourceb_stg')} (
-        asset_id STRING, isin STRING, asset_class STRING, issuer STRING, currency STRING,
-        market_value DECIMAL(20,2), valuation_date DATE, source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (asset_class, days(valuation_date))"""
-    ddl["trade_product_sourcea_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trade_product_sourcea_stg')} (
-        trade_id STRING, product_type STRING, underlying_id STRING, pay_leg_currency STRING,
-        receive_leg_currency STRING, fixed_rate DECIMAL(12,8), floating_index STRING,
-        strike DECIMAL(20,6), option_type STRING, volatility DECIMAL(10,6),
-        barrier_level DECIMAL(20,6), product_attributes MAP<STRING, STRING>,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (product_type)"""
-    ddl["trade_product_sourceb_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trade_product_sourceb_stg')} (
-        trade_id STRING, product_type STRING, underlying_id STRING, pay_leg_currency STRING,
-        receive_leg_currency STRING, fixed_rate DECIMAL(12,8), floating_index STRING,
-        strike DECIMAL(20,6), option_type STRING, volatility DECIMAL(10,6),
-        barrier_level DECIMAL(20,6), product_attributes MAP<STRING, STRING>,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (product_type)"""
-    ddl["trades_sourcea_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trades_sourcea_stg')} (
-        trade_id STRING, customer_id STRING, netting_set_id STRING, product_type STRING,
-        trade_date DATE, maturity_date DATE, currency STRING, notional DECIMAL(20,2),
-        mark_to_market DECIMAL(20,2), status STRING, as_of_date DATE,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (product_type, days(as_of_date))"""
-    ddl["trades_sourceb_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'trades_sourceb_stg')} (
-        trade_id STRING, customer_id STRING, netting_set_id STRING, product_type STRING,
-        trade_date DATE, maturity_date DATE, currency STRING, notional DECIMAL(20,2),
-        mark_to_market DECIMAL(20,2), status STRING, as_of_date DATE,
-        source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (product_type, days(as_of_date))"""
-    ddl["collateral_sourcea_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'collateral_sourcea_stg')} (
-        collateral_id STRING, customer_id STRING, asset_id STRING, agreement_id STRING,
-        collateral_type STRING, quantity DECIMAL(20,6), market_value DECIMAL(20,2), currency STRING,
-        valuation_date DATE, source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (days(valuation_date))"""
-    ddl["collateral_sourceb_stg"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, legacy_namespace, 'collateral_sourceb_stg')} (
-        collateral_id STRING, customer_id STRING, asset_id STRING, agreement_id STRING,
-        collateral_type STRING, quantity DECIMAL(20,6), market_value DECIMAL(20,2), currency STRING,
-        valuation_date DATE, source_system STRING, ingest_timestamp TIMESTAMP
-    ) USING iceberg PARTITIONED BY (days(valuation_date))"""
+    # Stage namespace tables (always created)
 
     # New stage namespace tables.
     ddl["customer_stage_sourcea"] = f"""CREATE TABLE IF NOT EXISTS {_table_ref(catalog_name, stage_namespace, 'customer_stage_sourcea')} (

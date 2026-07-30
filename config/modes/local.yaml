@@ -1,0 +1,30 @@
+# Local execution mode - everything local, no external services
+execution_mode: local
+spark_mode: local
+catalog:
+  name: local
+  type: local
+  uri: file:///tmp/iceberg
+  namespace: risk_analytics
+  stage_namespace: risk_analytics_stage
+  ods_namespace: risk_analytics_ods
+  warehouse: file:///tmp/iceberg/warehouse
+storage:
+  type: local
+  path: ./data/warehouse
+orchestration: scripts
+streaming: disabled
+kafka:
+  bootstrap_servers: null
+  topics:
+    ingest_prefix: null
+    trigger_topic: null
+airflow:
+  api_url: null
+  username: null
+  password: null
+ui:
+  type: react
+  backend: fastapi
+  port: 3000
+  api_port: 8000

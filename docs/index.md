@@ -42,7 +42,9 @@ The delivery demonstrates production-minded data engineering practices in a port
 - [Framework Overview, System Design & Tech Stack](architecture.md): architecture, runtime flow, and execution paths.
 - [Data Model and Risk Metrics](data-model-risk-metrics.md): table contracts, lineage, formulas, and worked examples.
 - [Platform Interfaces and Operations](platform-interfaces-and-operations.md): dashboard, orchestration, SQL, notebook, and messaging interfaces.
-- [Runbook and Local Execution](runbooks.md): setup, first run, offline run, and local no-Airflow execution.
+- [Runbook and Local Execution](runbooks.md): setup, first run, offline run, and local no-Airflow execution with step-by-step guides for all execution modes.
+- [Architecture Simplification for Local/Hybrid Modes](architecture_simplification.md): simplified architecture details for local and hybrid execution modes.
+- [Logging and Monitoring](logging_and_monitoring.md): centralized logging system, performance metrics, and Splunk integration.
 - [Scripts Reference](scripts-reference.md): why each `scripts/` entry exists, when to use it, and the steps it performs.
 - [Repository File Guide & Configuration](project-reference.md): what every file in the repository is for, plus configuration controls.
 - [Metadata-Driven Architecture and YAML Patterns](metadata-driven-architecture.md): how YAML pipelines are authored and executed.

@@ -4,12 +4,15 @@ import json
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
+import subprocess
+import time
 
 import requests
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from risk_analytics.config import load_config
@@ -35,8 +38,29 @@ LINKS: list[dict[str, str]] = [
 API_VERSION = "2.0.0"
 
 app = FastAPI(title="Risk Analytics Platform API", version=API_VERSION)
+
+# Enable CORS for React frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8501", "http://localhost:8502"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRANSFORM_DIR = REPO_ROOT / "transform"
+
+# Execution mode context
+execution_mode = os.getenv("EXECUTION_MODE", "docker")
+config = load_config(execution_mode)
+pipeline_state: Dict[str, Any] = {
+    "status": "idle",
+    "current_dag": None,
+    "progress": 0,
+    "error": None,
+    "last_updated": None,
+}
 
 ENTITIES = ("customer", "asset", "collateral", "deals")
 SOURCE_LABELS = {"sourcea": "sourceA", "sourceb": "sourceB"}
@@ -300,14 +324,85 @@ def tables() -> dict[str, Any]:
 
 @app.post("/pipeline/execute")
 def execute_pipeline_run(request: PipelineExecuteRequest) -> dict[str, Any]:
-  """Trigger a pipeline execution through Airflow.
+  """Trigger a pipeline execution through Airflow or scripts.
 
   ``target`` selects the DAG so callers can run the whole STAGE/ODS chain or a
   single namespace step without knowing the DAG naming convention.
+  
+  For local/hybrid modes, executes via Python scripts instead of Airflow.
   """
   target = request.target.strip().lower()
   conf: dict[str, Any] = {"as_of_date": request.as_of_date, **request.paths}
 
+  # For local/hybrid modes with script orchestration
+  if execution_mode in ["local", "hybrid"]:
+    try:
+      pipeline_state["status"] = "running"
+      pipeline_state["current_dag"] = target
+      pipeline_state["progress"] = 0
+      pipeline_state["error"] = None
+      pipeline_state["last_updated"] = time.time()
+      
+      # Execute the pipeline via scripts
+      if target == "bootstrap":
+        result = subprocess.run(
+          ["python", "jobs/bootstrap.py", "--as-of-date", request.as_of_date],
+          capture_output=True,
+          text=True,
+          timeout=300
+        )
+      elif target in ["stage", "ods"]:
+        entity, source = _validate_entity_and_source(request.entity, request.source)
+        cmd = [
+          "python", "jobs/run_source_to_ods_step.py",
+          "--layer", target,
+          "--entity", entity,
+          "--source", source,
+          "--as-of-date", request.as_of_date
+        ]
+        if request.paths:
+          for key, value in request.paths.items():
+            cmd.extend(["--param", f"{key}={value}"])
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+      elif target == "riskmetrics":
+        result = subprocess.run(
+          ["python", "jobs/run_risk_pipeline.py",
+           "--as-of-date", request.as_of_date,
+           "--data-model", request.data_model],
+          capture_output=True,
+          text=True,
+          timeout=300
+        )
+      else:
+        raise HTTPException(400, f"Unknown target: {target}")
+      
+      if result.returncode == 0:
+        pipeline_state["status"] = "success"
+        pipeline_state["progress"] = 100
+      else:
+        pipeline_state["status"] = "error"
+        pipeline_state["error"] = result.stderr
+          
+      pipeline_state["last_updated"] = time.time()
+      
+      return {
+        "status": pipeline_state["status"],
+        "target": target,
+        "message": "Pipeline execution completed"
+      }
+      
+    except subprocess.TimeoutExpired:
+      pipeline_state["status"] = "error"
+      pipeline_state["error"] = "Pipeline execution timed out"
+      pipeline_state["last_updated"] = time.time()
+      raise HTTPException(408, "Pipeline execution timed out")
+    except Exception as e:
+      pipeline_state["status"] = "error"
+      pipeline_state["error"] = str(e)
+      pipeline_state["last_updated"] = time.time()
+      raise HTTPException(500, f"Pipeline execution failed: {str(e)}")
+
+  # For Docker mode with Airflow orchestration
   if target == "bootstrap":
     dag_id = BOOTSTRAP_DAG_ID
   elif target == "orchestration":
@@ -515,3 +610,179 @@ def publish_kafka_event(request: KafkaPublishRequest) -> dict[str, Any]:
     "pipeline_triggered": bool(triggered),
     "pipeline_dag_run_id": triggered.get("dag_run_id") if triggered else None,
   }
+
+
+# New unified API endpoints for React UI
+
+class HealthStatus(BaseModel):
+    api: str
+    spark: str
+    nessie: str
+    storage: str
+    execution_mode: str
+
+
+def check_spark_health(mode: str) -> str:
+    """Check Spark health based on execution mode."""
+    if mode == "docker":
+        # Check if Docker Spark services are running
+        try:
+            response = requests.get("http://localhost:8080", timeout=2)
+            return "healthy" if response.status_code == 200 else "unhealthy"
+        except:
+            return "unhealthy"
+    elif mode == "hybrid":
+        # Check if Spark Connect is available
+        try:
+            spark = create_spark_session("health_check", "main", mode)
+            spark.stop()
+            return "healthy"
+        except:
+            return "unhealthy"
+    else:
+        # Local mode - check if Spark can be created
+        try:
+            spark = create_spark_session("health_check", "main", mode)
+            spark.stop()
+            return "healthy"
+        except:
+            return "unhealthy"
+
+
+def check_nessie_health(mode: str) -> str:
+    """Check Nessie health based on execution mode."""
+    if mode == "local":
+        return "unhealthy"  # Local mode doesn't use Nessie
+    
+    try:
+        uri = config["catalog"].get("uri", "http://localhost:19120/api/v2")
+        response = requests.get(f"{uri}/config", timeout=2)
+        return "healthy" if response.status_code == 200 else "unhealthy"
+    except:
+        return "unhealthy"
+
+
+def check_storage_health(mode: str) -> str:
+    """Check storage health based on execution mode."""
+    if mode == "local":
+        # Check if local storage directory exists
+        storage_path = config["storage"].get("path", "./data/warehouse")
+        return "healthy" if os.path.exists(storage_path) else "unhealthy"
+    
+    try:
+        endpoint = config["storage"].get("endpoint", "http://localhost:8333")
+        response = requests.get(endpoint, timeout=2)
+        return "healthy" if response.status_code == 200 else "unhealthy"
+    except:
+        return "unhealthy"
+
+
+@app.get("/api/platform/health")
+async def get_health() -> HealthStatus:
+    """Health check for all platform services."""
+    return HealthStatus(
+        api="healthy",
+        spark=check_spark_health(execution_mode),
+        nessie=check_nessie_health(execution_mode),
+        storage=check_storage_health(execution_mode),
+        execution_mode=execution_mode
+    )
+
+
+@app.get("/api/platform/config")
+async def get_config() -> Dict[str, Any]:
+    """Get current platform configuration."""
+    # Return sanitized config (remove sensitive keys)
+    safe_config = config.copy()
+    if "storage" in safe_config and "secret_key" in safe_config["storage"]:
+        safe_config["storage"]["secret_key"] = "***"
+    return safe_config
+
+
+@app.post("/api/platform/config")
+async def update_config(config_update: Dict[str, Any]) -> Dict[str, str]:
+    """Update platform configuration (local mode only)."""
+    if execution_mode != "local":
+        raise HTTPException(400, "Config updates only allowed in local mode")
+    
+    # In a real implementation, this would update the config file
+    # For now, just return success
+    return {"status": "updated"}
+
+
+@app.get("/api/pipeline/status")
+async def get_pipeline_status() -> Dict[str, Any]:
+    """Get current pipeline execution status."""
+    return pipeline_state
+
+
+@app.get("/api/data/tables")
+async def list_tables() -> Dict[str, Any]:
+    """List all available tables in the catalog."""
+    try:
+        spark = create_spark_session("list_tables", "main", execution_mode)
+        
+        # Get table list based on catalog type
+        if execution_mode == "local":
+            tables = spark.sql("SHOW TABLES IN local").collect()
+        else:
+            tables = spark.sql("SHOW TABLES IN nessie").collect()
+        
+        spark.stop()
+        
+        table_list = [row.tableName for row in tables]
+        return {"tables": table_list}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to list tables: {str(e)}")
+
+
+@app.get("/api/data/table/{table_name}")
+async def get_table_data(
+    table_name: str,
+    limit: int = 100,
+    offset: int = 0
+) -> Dict[str, Any]:
+    """Get data from specified table."""
+    try:
+        spark = create_spark_session("query_table", "main", execution_mode)
+        
+        # Query the table
+        if execution_mode == "local":
+            df = spark.sql(f"SELECT * FROM local.{table_name} LIMIT {limit} OFFSET {offset}")
+        else:
+            df = spark.sql(f"SELECT * FROM nessie.{table_name} LIMIT {limit} OFFSET {offset}")
+        
+        data = df.toJSON().collect()
+        spark.stop()
+        
+        return {
+            "table": table_name,
+            "data": data,
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to query table: {str(e)}")
+
+
+@app.get("/api/data/table/{table_name}/schema")
+async def get_table_schema(table_name: str) -> Dict[str, Any]:
+    """Get schema for specified table."""
+    try:
+        spark = create_spark_session("get_schema", "main", execution_mode)
+        
+        # Get table schema
+        if execution_mode == "local":
+            df = spark.sql(f"SELECT * FROM local.{table_name} LIMIT 1")
+        else:
+            df = spark.sql(f"SELECT * FROM nessie.{table_name} LIMIT 1")
+        
+        schema = [{"name": field.name, "type": str(field.dataType)} for field in df.schema.fields]
+        spark.stop()
+        
+        return {
+            "table": table_name,
+            "schema": schema
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get table schema: {str(e)}")

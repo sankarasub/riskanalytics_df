@@ -245,6 +245,43 @@ function Wait-ForRequiredServices {
     throw "The following services did not become ready in time: $($RequiredServices -join ', ')"
 }
 
+function Wait-ForAirflowApi {
+    param(
+        [int]$MaxAttempts = 30,
+        [int]$DelaySeconds = 5
+    )
+
+    Write-Host "Waiting for Airflow API to be ready..."
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            $previousErrorPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $response = Invoke-RestMethod -Uri "$airflowApiRoot/health" -Headers $airflowHeaders -TimeoutSec 10
+                # Check if the response contains the expected health components
+                if ($response.PSObject.Properties.Name -contains 'metadatabase' -and 
+                    $response.PSObject.Properties.Name -contains 'scheduler') {
+                    Write-Host "Airflow API is ready."
+                    return
+                }
+            }
+            finally {
+                $ErrorActionPreference = $previousErrorPreference
+            }
+        }
+        catch {
+            # Connection failed, retry
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            Write-Host "Waiting for Airflow API (attempt $attempt/$MaxAttempts)..."
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    throw "Airflow API did not become ready in time. Check Airflow logs with 'docker compose logs airflow-webserver airflow-scheduler'."
+}
+
 function Invoke-AirflowApi {
     param(
         [string]$Method = 'Get',
@@ -386,7 +423,7 @@ function Wait-ForTriggeredDagRun {
         [int]$PollSeconds = 15
     )
 
-    $filter = [uri]::EscapeDataString($NotBefore.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))
+    $filter = [uri]::EscapeDataString($NotBefore.ToUniversalTime().ToString('o'))
     while ((Get-Date) -lt $Deadline) {
         $runs = @((Invoke-AirflowApi -Path "dags/$DagId/dagRuns?execution_date_gte=$filter&order_by=-execution_date&limit=1").dag_runs)
         if ($runs.Count -eq 0) {
@@ -473,6 +510,8 @@ Write-Host 'Current service state:'
 Invoke-Compose -Args @('compose', 'ps', '--all') -FailureMessage 'docker compose ps failed.'
 
 Wait-ForRequiredServices -RequiredServices @('spark-master', 'airflow-webserver', 'airflow-scheduler', 'business-ui', 'postgres', 'nessie')
+
+Wait-ForAirflowApi
 
 $expectedDagIds = Get-ExpectedDagIds
 $registeredDagIds = Assert-ExpectedDagsRegistered -DagIds $expectedDagIds

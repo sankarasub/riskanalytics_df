@@ -2,276 +2,814 @@
 
 > Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Interfaces](platform-interfaces-and-operations.md) | [Scripts Reference](scripts-reference.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
 
-This is the primary operations guide for setting up and running the platform.
+This is the primary operations guide for setting up and running the platform in all execution modes.
 
-## Prerequisites
+See [Architecture Simplification](architecture_simplification.md) for details on the different execution modes and their architectural differences.
 
-- Docker Desktop with Compose
-- PowerShell (Windows)
-- Python 3.11+ for local host execution and tests
+See [Logging and Monitoring](logging_and_monitoring.md) for detailed information about the centralized logging system and Splunk integration.
 
-Initial setup:
+## Quick Start - Environment Setup
+
+### Step 1: System Requirements
+
+**Required Software:**
+- Python 3.11 (required to match Docker runtime)
+- Docker Desktop (for Docker/Hybrid modes only)
+- Node.js 16+ and npm (for React UI)
+- PowerShell (Windows) or Bash (Linux/Mac)
+- Java 8+ (for Spark)
+
+**System Resources:**
+- **Local Mode**: ~4 GB RAM
+- **Hybrid Mode**: ~6 GB RAM
+- **Docker Mode**: ~10 GB RAM
+
+### Step 2: Clone and Configure
 
 ```powershell
+# Clone the repository (if not already done)
+git clone <repository-url>
+cd riskanalytics_df
+
+# Copy environment configuration
 Copy-Item .env.example .env
 ```
 
-## Run Modes
-
-### Mode A: Full first build
-
-Use after clone or dependency changes.
+### Step 3: Setup Python Virtual Environment
 
 ```powershell
-.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode first-build
+# Create virtual environment and install all dependencies
+python setup_venv.py
+
+# This will:
+# - Create .venv directory
+# - Install all required packages (Spark, UI, notebooks, etc.)
+# - Generate requirements-lock.txt for reproducibility
+# - Verify local mode dependencies
 ```
 
-What it does:
+**Expected Output:**
+```
+Creating virtual environment at .venv
+Installing: requirements\ui.txt requirements\notebook.txt requirements\docs.txt requirements\airflow.txt requirements\spark.txt requirements\dev.txt
+...
+Local-mode dependency check passed: pyspark=4.1.3 pyarrow=18.1.0 grpcio=1.76.0
+Wrote resolved dependency lock file: requirements-lock.txt
 
-- Builds and starts required services
-- Verifies all 27 `ra_*` DAGs are registered, then unpauses them
-- Triggers `ra_createtables_and_data`: creates tables and seeds data
-- Waits for the STAGE/ODS orchestration and the final risk metrics run to succeed
-- Runs validation checks against the published tables
-
-See [Scripts Reference](scripts-reference.md) for the full step list, the other run scripts, and
-when to use each.
-
-### Mode B: Regular offline run
-
-Use for routine development when images and cache are already available.
-
-```powershell
-.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode offline
+Virtual environment is ready.
+Activate it with: .venv\Scripts\activate
 ```
 
-### Mode C: Pipeline run on already-running platform
+### Step 4: Activate Virtual Environment
 
 ```powershell
-.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18
+# Windows PowerShell
+.venv\Scripts\activate
+
+# Or use Python directly without activation
+.venv\Scripts\python.exe <script>
 ```
 
-If PowerShell blocks script execution with `running scripts is disabled on this system`, run this in the same session and retry:
+### Step 5: Install React UI Dependencies
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+cd risk-analytics-ui
+npm install
+cd ..
 ```
 
-## Airflow-Orchestrated Flow
-
-DAG order:
-
-1. `ra_createtables_and_data` (creates tables, seeds sources, then triggers step 2)
-2. `ra_stage_to_ods_orchestration` (triggers `ra_<source>_<entity>_stage` then `ra_<source>_<entity>_ods` per entity)
-3. `ra_riskmetrics_eval_ods` (triggered automatically once every ODS load completes)
-
-Unpause the leaf DAGs once so the orchestration can trigger them:
+### Step 6: Verify Installation
 
 ```powershell
+# Verify Python packages
+.venv\Scripts\python.exe -c "import pyspark, pyarrow, grpc; print('✓ Core dependencies OK')"
+
+# Verify UI build
+cd risk-analytics-ui
+npm run build
+cd ..
+```
+
+## Execution Mode Setup
+
+### Local Mode Setup (Fastest Development)
+
+**No external services required - everything runs locally.**
+
+```powershell
+# Set execution mode
+$env:EXECUTION_MODE = "local"
+
+# Verify configuration
+.venv\Scripts\python.exe -c "from risk_analytics.config import load_config; print(load_config())"
+
+# You're ready to run!
+# See "Local Mode Runbook" below
+```
+
+### Hybrid Mode Setup (Local Spark + Remote Catalog/Storage)
+
+**Requires Nessie and SeaweedFS services.**
+
+```powershell
+# Start required Docker services
+docker compose up -d nessie seaweedfs
+
+# Wait for services to be healthy (30-60 seconds)
+docker compose ps
+
+# Set execution mode
+$env:EXECUTION_MODE = "hybrid"
+
+# Verify connectivity
+curl http://localhost:19120/api/v2/config  # Nessie
+curl http://localhost:8333                  # SeaweedFS
+
+# You're ready to run!
+# See "Hybrid Mode Runbook" below
+```
+
+### Docker Mode Setup (Full Production Stack)
+
+**Requires all Docker services.**
+
+```powershell
+# Start full Docker stack
+docker compose up --build -d
+
+# Wait for all services to be healthy (2-3 minutes)
+docker compose ps
+
+# Set execution mode
+$env:EXECUTION_MODE = "docker"
+
+# Verify Airflow is ready
+docker compose exec airflow-webserver airflow dags list
+
+# You're ready to run!
+# See "Docker Mode Runbook" below
+```
+
+## Execution Modes Overview
+
+The platform supports three execution modes:
+
+| Mode | Complexity | Speed | Services Required | Use Case |
+|------|-----------|-------|------------------|----------|
+| **Local** | Simplest | Fastest | None | Development, debugging |
+| **Hybrid** | Medium | Fast | Nessie, SeaweedFS | Testing with persistence |
+| **Docker** | Full | Medium | All services | Production-like, full features |
+
+Choose the mode that fits your current needs:
+- **Local mode** for quick development iterations
+- **Hybrid mode** for testing with data persistence
+- **Docker mode** for production-like environment with all features
+
+---
+
+## Local Mode Runbook
+
+### Architecture
+```
+Files → Stage Tables → ODS Tables → Risk Metrics
+```
+
+### Prerequisites
+- ✓ Python 3.11 installed
+- ✓ Virtual environment created (`python setup_venv.py`)
+- ✓ Node.js and npm installed
+- ✓ Execution mode set to `local`
+
+### Step 1: Set Execution Mode
+
+```powershell
+$env:EXECUTION_MODE = "local"
+```
+
+### Step 2: Start Local Platform
+
+```powershell
+# Start the platform in local mode
+.\scripts\start_local.ps1
+```
+
+**This will:**
+- Create local data directory if needed
+- Start local embedded Spark
+- Launch React UI at http://localhost:5173
+- Start FastAPI backend at http://localhost:8000
+
+**Expected Output:**
+```
+Starting Risk Analytics Platform in LOCAL mode...
+✓ Local Spark session created
+✓ React UI starting at http://localhost:5173
+✓ FastAPI backend starting at http://localhost:8000
+```
+
+### Step 3: Create Tables
+
+```powershell
+# Open new terminal (keep platform running)
+.venv\Scripts\python.exe jobs\bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+```
+
+**Expected Output:**
+```
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap | PIPELINE START: bootstrap
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap | Execution Mode: local
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap | CONNECTION DETAILS:
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap |   Catalog: local
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap |   Catalog Type: memory
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap |   Storage Type: local
+2026-07-18 14:30:45 | INFO | pipeline.bootstrap |   Spark Mode: local
+...
+STEP COMPLETE: create_source_to_ods_tables
+Duration: 1234.56ms (1.23s)
+PIPELINE COMPLETED: bootstrap
+```
+
+### Step 4: Run Stage Transformations
+
+```powershell
+# Stage customer data from SourceA
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity customer --source sourcea --as-of-date 2026-07-18
+
+# Stage asset data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity asset --source sourcea --as-of-date 2026-07-18
+
+# Stage collateral data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity collateral --source sourcea --as-of-date 2026-07-18
+
+# Stage deals data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity deals --source sourcea --as-of-date 2026-07-18
+```
+
+**Expected Output:**
+```
+PIPELINE START: source_to_ods_stage_sourcea
+STEP START: configure_file_paths
+STEP COMPLETE: configure_file_paths
+STEP START: stage_customer_sourcea
+Records Processed: 5
+Duration: 456.78ms (0.46s)
+STEP COMPLETE: stage_customer_sourcea
+PIPELINE COMPLETED: source_to_ods_stage_sourcea
+```
+
+### Step 5: Run ODS Transformations
+
+```powershell
+# ODS customer data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity customer --source sourcea --as-of-date 2026-07-18
+
+# ODS asset data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity asset --source sourcea --as-of-date 2026-07-18
+
+# ODS collateral data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity collateral --source sourcea --as-of-date 2026-07-18
+
+# ODS deals data
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity deals --source sourcea --as-of-date 2026-07-18
+```
+
+### Step 6: Run Risk Metrics
+
+```powershell
+.venv\Scripts\python.exe jobs\run_risk_pipeline.py --as-of-date 2026-07-18 --data-model source-to-ods
+```
+
+**Expected Output:**
+```
+PIPELINE START: risk_metrics_pipeline
+STEP START: create_nessie_branch
+STEP COMPLETE: create_nessie_branch
+STEP START: run_risk_pipeline
+Records Processed: 5
+Duration: 2345.67ms (2.35s)
+STEP COMPLETE: run_risk_pipeline
+PIPELINE COMPLETED: risk_metrics_pipeline
+```
+
+### Step 7: Validate Results
+
+```powershell
+# Check health via API
+Invoke-RestMethod http://localhost:8000/api/platform/health
+
+# Check available tables
+Invoke-RestMethod http://localhost:8000/api/data/tables
+
+# Check risk metrics
+Invoke-RestMethod http://localhost:8000/api/metrics/summary?as_of_date=2026-07-18
+```
+
+### Step 8: Verify in UI
+
+1. Open http://localhost:5173
+2. Navigate to **Dashboard** - verify health status shows all systems healthy
+3. Navigate to **Data Explorer** - browse created tables:
+   - `risk_analytics_stage.customer_stage_sourcea`
+   - `risk_analytics_ods.customer`
+   - `risk_analytics_ods.risk_metrics`
+4. Navigate to **Risk Metrics** - view calculated metrics
+
+### Step 9: Run Validation Notebook (Recommended)
+
+```powershell
+# Set execution mode (if not already set)
+$env:EXECUTION_MODE = "local"
+
+# Start Jupyter
+.venv\Scripts\jupyter.exe notebook
+
+# Open notebooks/validation_and_testing.ipynb
+# Run all cells to validate the complete pipeline
+```
+
+**Validation notebook will check:**
+- ✓ Environment configuration
+- ✓ Table structure
+- ✓ Data loading
+- ✓ Data quality
+- ✓ Business logic
+- ✓ Performance
+- ✓ End-to-end pipeline
+
+### Step 10: Check Logs
+
+```powershell
+# View execution logs
+Get-Content logs\pipeline_execution.log -Tail 50
+
+# View structured metrics
+Get-Content logs\pipeline_metrics.json
+```
+
+### Local Mode Troubleshooting
+
+**Issue:** Platform won't start
+```powershell
+# Check if port 8000 or 5173 is in use
+netstat -ano | findstr :8000
+netstat -ano | findstr :5173
+```
+
+**Issue:** Spark connection failed
+```powershell
+# Verify Java is installed
+java -version
+
+# Verify Python 3.11
+python --version
+```
+
+**Issue:** Tables not found
+```powershell
+# Run bootstrap first
+.venv\Scripts\python.exe jobs\bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+```
+
+---
+
+## Hybrid Mode Runbook
+
+### Architecture
+```
+Files → Stage Tables → ODS Tables → Risk Metrics
+(Remote Nessie catalog + SeaweedFS storage)
+```
+
+### Prerequisites
+- ✓ All Local Mode prerequisites
+- ✓ Docker Desktop running
+- ✓ Nessie and SeaweedFS started
+
+### Step 1: Start Required Services
+
+```powershell
+# Start only Nessie and SeaweedFS
+docker compose up -d nessie seaweedfs
+
+# Wait for services to be healthy (30-60 seconds)
+docker compose ps
+```
+
+### Step 2: Set Execution Mode
+
+```powershell
+$env:EXECUTION_MODE = "hybrid"
+```
+
+### Step 3: Verify Services
+
+```powershell
+# Check Nessie
+curl http://localhost:19120/api/v2/config
+
+# Check SeaweedFS
+curl http://localhost:8333
+```
+
+### Step 4: Start Hybrid Platform
+
+```powershell
+# Start the platform in hybrid mode
+.\scripts\start_hybrid.ps1
+```
+
+**This will:**
+- Verify Nessie and SeaweedFS are running
+- Start local Spark with remote catalog connection
+- Launch React UI at http://localhost:5173
+- Start FastAPI backend at http://localhost:8000
+
+### Step 5: Run Pipeline (Same as Local Mode)
+
+```powershell
+# Create tables
+.venv\Scripts\python.exe jobs\bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+
+# Stage transformations
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity customer --source sourcea --as-of-date 2026-07-18
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity asset --source sourcea --as-of-date 2026-07-18
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity collateral --source sourcea --as-of-date 2026-07-18
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity deals --source sourcea --as-of-date 2026-07-18
+
+# ODS transformations
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity customer --source sourcea --as-of-date 2026-07-18
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity asset --source sourcea --as-of-date 2026-07-18
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity collateral --source sourcea --as-of-date 2026-07-18
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity deals --source sourcea --as-of-date 2026-07-18
+
+# Risk metrics
+.venv\Scripts\python.exe jobs\run_risk_pipeline.py --as-of-date 2026-07-18 --data-model source-to-ods
+```
+
+### Step 6: Validate Results
+
+```powershell
+# Check health via API
+Invoke-RestMethod http://localhost:8000/api/platform/health
+
+# Check Nessie connection
+Invoke-WebRequest http://localhost:19120/api/v2/config
+
+# Check SeaweedFS connection
+Invoke-WebRequest http://localhost:8333
+
+# Check data
+Invoke-RestMethod http://localhost:8000/api/data/tables
+Invoke-RestMethod http://localhost:8000/api/metrics/summary?as_of_date=2026-07-18
+```
+
+### Step 7: Verify in UI
+
+1. Open http://localhost:5173
+2. Navigate to **Dashboard** - verify all services healthy
+3. Navigate to **Data Explorer** - browse tables in remote catalog
+4. Navigate to **Risk Metrics** - view metrics
+
+### Step 8: Run Validation Notebook
+
+```powershell
+# Set execution mode
+$env:EXECUTION_MODE = "hybrid"
+
+# Start Jupyter
+.venv\Scripts\jupyter.exe notebook
+
+# Open notebooks/validation_and_testing.ipynb
+# Run all cells to validate the complete pipeline
+```
+
+### Hybrid Mode Troubleshooting
+
+**Issue:** Cannot connect to Nessie
+```powershell
+# Verify Nessie is running
+docker compose ps nessie
+
+# Check Nessie logs
+docker compose logs nessie
+
+# Restart Nessie
+docker compose restart nessie
+```
+
+**Issue:** Catalog connection errors
+```powershell
+# Check Nessie URI in config
+Get-Content config\modes\hybrid.yaml
+
+# Verify Nessie is accessible
+curl http://localhost:19120/api/v2/config
+```
+
+---
+
+## Docker Mode Runbook
+
+### Architecture
+```
+Files/Kafka → Source Tables → Stage Tables → ODS Tables → Risk Metrics
+```
+
+### Prerequisites
+- ✓ All Local Mode prerequisites
+- ✓ Docker Desktop running
+- ✓ Full Docker stack started
+
+### Step 1: Start Full Docker Stack
+
+```powershell
+docker compose up --build -d
+```
+
+### Step 2: Verify Services
+
+```powershell
+docker compose ps --all
+```
+
+### Step 3: Set Execution Mode
+
+```powershell
+$env:EXECUTION_MODE = "docker"
+```
+
+### Step 4: Run Pipeline via Airflow
+
+```powershell
+# Unpause DAGs
 foreach ($source in @('sourceA', 'sourceB')) {
   foreach ($entity in @('customer', 'asset', 'collateral', 'deals')) {
     docker compose exec airflow-webserver airflow dags unpause "ra_${source}_${entity}_stage"
     docker compose exec airflow-webserver airflow dags unpause "ra_${source}_${entity}_ods"
   }
 }
+
+# Trigger bootstrap DAG
+docker compose exec airflow-webserver airflow dags trigger ra_createtables_and_data --conf '{"as_of_date":"2026-07-18"}'
 ```
 
-Useful commands:
+### Step 5: Monitor Execution
 
 ```powershell
-docker compose exec airflow-webserver airflow dags list
+# Check DAG runs
+docker compose exec airflow-webserver airflow dags list-runs -d ra_createtables_and_data
+docker compose exec airflow-webserver airflow dags list-runs -d ra_stage_to_ods_orchestration
 docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
-docker compose exec airflow-webserver airflow dags trigger ra_riskmetrics_eval_ods --conf '{"as_of_date":"2026-07-18"}'
 ```
 
-## Local Run Without Airflow
-
-Use this when you want Docker-backed services but local Python execution.
-
-### Quick command
+### Step 6: Validate Results
 
 ```powershell
-python .\setup_venv.py
-.\.venv\Scripts\python.exe .\scripts\run_local_python_no_airflow.py --as-of-date 2026-07-18 --docker-mode reuse
-```
-
-Upgrade libraries in the local Python environment and refresh the lock snapshot:
-
-```powershell
-py -3.11 .\setup_venv.py --update-libraries
-```
-
-Useful options:
-
-- `--docker-mode fresh|reuse|none`
-- `--source-mode sourcea|sourceb|both`
-- `--run-info-dir <path>`
-- `--skip-run-info`
-
-### Minimal manual path (no DAG trigger)
-
-```powershell
-$Py = ".\\.venv\\Scripts\\python.exe"
-$env:SPARK_REMOTE = "sc://localhost:15002"
-$env:NESSIE_URI = "http://localhost:19120/api/v2"
-
-& $Py .\jobs\bootstrap.py --action all --as-of-date 2026-07-18
-& $Py .\jobs\run_risk_pipeline.py --as-of-date 2026-07-18 --run-id local-manual-20260718 --data-model source-to-ods
-```
-
-## Run Verification
-
-### Service health
-
-```powershell
-docker compose ps --all
+# Health check
 docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py --check-iceberg
-```
 
-### Data checks
-
-```powershell
+# Data checks
 docker compose exec spark-master /opt/spark/bin/spark-sql -e "SELECT COUNT(*) AS c FROM nessie.risk_analytics_ods.risk_metrics"
 docker compose exec spark-master /opt/spark/bin/spark-sql -e "SELECT MAX(as_of_date) AS latest_as_of FROM nessie.risk_analytics_ods.risk_metrics"
 ```
 
-### UI endpoint checks
+### Step 7: Access UIs
 
+- Business Dashboard: http://localhost:8501
+- Developer Control Plane: http://localhost:8502
+- Unified React UI: http://localhost:3000
+- API: http://localhost:8000
+
+### Docker Mode Troubleshooting
+
+**Issue:** Services not starting
 ```powershell
+# Check Docker Desktop is running
+docker version
+
+# Check logs
+docker compose logs spark-master
+docker compose logs airflow-webserver
+```
+
+**Issue:** DAGs not registered
+```powershell
+# Restart Airflow
+docker compose restart airflow-webserver airflow-scheduler
+
+# Re-sync DAGs
+docker compose exec airflow-webserver airflow dags list
+```
+
+---
+
+## Mode-Specific Validation
+
+### Local Mode Validation
+```powershell
+# 1. Check local storage directory exists
+Test-Path ".\data\warehouse"
+
+# 2. Verify Spark can be created locally
+.venv\Scripts\python.exe -c "from risk_analytics.spark import create_spark_session; spark = create_spark_session('test', 'main', 'local'); print('Local Spark OK'); spark.stop()"
+
+# 3. Verify API health
+Invoke-RestMethod http://localhost:8000/api/platform/health
+
+# 4. Check tables are in local catalog
+Invoke-RestMethod http://localhost:8000/api/data/tables
+# Should return tables from 'local' catalog
+```
+
+### Hybrid Mode Validation
+```powershell
+# 1. Verify remote services are running
+Invoke-WebRequest http://localhost:19120/api/v2/config
+Invoke-WebRequest http://localhost:8333
+
+# 2. Verify Spark can connect to remote catalog
+.venv\Scripts\python.exe -c "from risk_analytics.spark import create_spark_session; spark = create_spark_session('test', 'main', 'hybrid'); print('Hybrid Spark OK'); spark.stop()"
+
+# 3. Verify API health
+Invoke-RestMethod http://localhost:8000/api/platform/health
+
+# 4. Check tables are in remote catalog
+Invoke-RestMethod http://localhost:8000/api/data/tables
+# Should return tables from 'nessie' catalog
+```
+
+### Docker Mode Validation
+```powershell
+# 1. Check all services are running
+docker compose ps --all
+
+# 2. Health check
+docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py --check-iceberg
+
+# 3. Verify data
+docker compose exec spark-master /opt/spark/bin/spark-sql -e "SELECT COUNT(*) AS c FROM nessie.risk_analytics_ods.risk_metrics"
+
+# 4. Check DAG status
+docker compose exec airflow-webserver airflow dags list
+```
+
+---
+
+## Quick Validation Commands
+
+### Service Health
+```powershell
+# Local/Hybrid
+Invoke-RestMethod http://localhost:8000/api/platform/health
+
+# Docker
+docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py --check-iceberg
+```
+
+### Data Verification
+```powershell
+# Local/Hybrid (via API)
+Invoke-RestMethod http://localhost:8000/api/data/tables
+Invoke-RestMethod http://localhost:8000/api/metrics/summary?as_of_date=2026-07-18
+
+# Docker (via Spark SQL)
+docker compose exec spark-master /opt/spark/bin/spark-sql -e "SELECT COUNT(*) AS c FROM nessie.risk_analytics_ods.risk_metrics"
+```
+
+### UI Validation
+```powershell
+# Check UI endpoints
 Invoke-WebRequest http://localhost:8000/health -UseBasicParsing
-Invoke-WebRequest http://localhost:8501/_stcore/health -UseBasicParsing
-Invoke-WebRequest http://localhost:8502/_stcore/health -UseBasicParsing
+Invoke-WebRequest http://localhost:5173 -UseBasicParsing  # React UI
+Invoke-WebRequest http://localhost:8501/_stcore/health -UseBasicParsing  # Business UI (Docker)
+Invoke-WebRequest http://localhost:8502/_stcore/health -UseBasicParsing  # Developer UI (Docker)
 ```
 
-## Kafka-Triggered Flow (Optional)
+---
 
-Continuous services:
+## Troubleshooting
 
-- `kafka-entity-stream` service
-- `airflow-triggerer` service, required by the deferrable Kafka sensors
-- `ra_kafka_<entity>_stage` DAGs (sensors) for `customer`, `asset`, `collateral`, and `deals`, each triggering `ra_kafka_<entity>_ods` and then `ra_riskmetrics_eval_ods`
+### Local Mode Issues
+- **Spark fails to start**: Ensure Java 8+ is installed
+- **Tables not found**: Verify bootstrap ran successfully
+- **API connection refused**: Check backend is running on port 8000
 
-Disable continuous mode:
+### Hybrid Mode Issues
+- **Cannot connect to Nessie**: Ensure `docker compose up -d nessie seaweedfs` ran first
+- **Catalog connection errors**: Check Nessie URI in config/modes/hybrid.yaml
+- **Storage errors**: Verify SeaweedFS is accessible at configured endpoint
 
+### Docker Mode Issues
+- **Services not starting**: Check Docker Desktop is running
+- **DAGs not registered**: Run `docker compose restart airflow-webserver airflow-scheduler`
+- **Memory issues**: Increase Docker Desktop memory allocation
+
+---
+
+## Clean Restart
+
+### Local Mode
 ```powershell
-docker compose stop kafka-entity-stream
-foreach ($entity in "customer", "asset", "collateral", "deals") {
-  docker compose exec airflow-webserver airflow dags pause "ra_kafka_${entity}_stage"
-}
+# Stop services (Ctrl+C in terminal)
+# Remove local data if needed
+Remove-Item -Recurse -Force .\data\warehouse
+# Restart
+.\scripts\start_local.ps1
 ```
 
-Enable continuous mode:
-
+### Hybrid Mode
 ```powershell
-docker compose start kafka-entity-stream
-foreach ($entity in "customer", "asset", "collateral", "deals") {
-  docker compose exec airflow-webserver airflow dags unpause "ra_kafka_${entity}_stage"
-}
-```
-
-### Kafka Run Commands
-
-Start only Kafka ingest path components:
-
-```powershell
-docker compose up -d kafka kafka-init kafka-ui kafka-entity-stream airflow-webserver airflow-scheduler airflow-triggerer
-```
-
-Verify topics:
-
-```powershell
-docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --list
-```
-
-Publish one customer event from CLI:
-
-```powershell
-docker compose exec kafka /bin/sh -c "printf '{\"customer_id\":\"CP001\",\"customer_name\":\"Alpha Capital\",\"legal_entity_id\":\"LE-CP001\",\"rating\":\"A\",\"country_code\":\"US\",\"entity_type\":\"BANK\",\"active_flag\":true,\"as_of_date\":\"2026-07-18\"}\n' | kafka-console-producer --bootstrap-server kafka:9092 --topic risk.customer.ingest"
-```
-
-Publish one deals event from Python:
-
-```python
-from confluent_kafka import Producer
-import json
-
-p = Producer({"bootstrap.servers": "localhost:29092"})
-p.produce("risk.deals.ingest", value=json.dumps({
-	"deal_id": "D001",
-	"trade_id": "T001",
-	"customer_id": "CP001",
-	"asset_id": "A100",
-	"collateral_id": "C100",
-	"netting_set_id": "NS-APEX",
-	"product_type": "SWAP",
-	"trade_date": "2026-07-18",
-	"maturity_date": "2031-07-18",
-	"currency": "USD",
-	"notional": 10000000.0,
-	"mark_to_market": 600000.0,
-	"status": "ACTIVE",
-	"as_of_date": "2026-07-18",
-	"volatility": 0.2,
-	"fixed_rate": 0.035,
-	"strike": 0.0,
-	"option_type": "NA"
-}).encode("utf-8"))
-p.flush(5)
-```
-
-Verify DAG chain execution:
-
-```powershell
-docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_stage
-docker compose exec airflow-webserver airflow dags list-runs -d ra_kafka_customer_ods
-docker compose exec airflow-webserver airflow dags list-runs -d ra_riskmetrics_eval_ods
-```
-
-Replace `customer` with `asset`, `collateral`, or `deals` to follow the other entity chains.
-
-Check the shared Spark pool if stage/ODS tasks stay queued:
-
-```powershell
-docker compose exec airflow-webserver airflow pools list
-```
-
-## Clean Restart Options
-
-Preserve named volumes:
-
-```powershell
+# Stop services (Ctrl+C in terminal)
+# Stop Docker services
 docker compose down
-docker compose up -d --no-build
+# Restart
+docker compose up -d nessie seaweedfs
+.\scripts\start_hybrid.ps1
 ```
 
-Remove all local state:
-
+### Docker Mode
 ```powershell
+# Stop and remove volumes
 docker compose down -v
-.\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -PlatformMode first-build
+# Full rebuild
+docker compose up --build -d
 ```
 
-## Run Report Artifacts (No-Airflow runner)
+---
 
-Default output:
+## Mode Switching
 
-- `logs/run-info/local_no_airflow_run_YYYYMMDD_HHMMSS.md`
+To switch between execution modes:
 
-The report captures run timestamp, input parameters, run id, and table row-count checks.
+1. **Stop all services**
+   - Local/Hybrid: Ctrl+C in terminal
+   - Docker: `docker compose down`
 
-## Testing
+2. **Set execution mode**
+   ```powershell
+   $env:EXECUTION_MODE = "local"    # or "hybrid" or "docker"
+   ```
 
-Use the dedicated [Testing](testing.md) page for full coverage details.
+3. **Start services for new mode**
+   - Local: `.\scripts\start_local.ps1`
+   - Hybrid: `docker compose up -d nessie seaweedfs` then `.\scripts\start_hybrid.ps1`
+   - Docker: `docker compose up -d`
 
-Quick test commands:
+4. **Verify mode switch**
+   - Check React UI Dashboard page for current execution mode
+   - Verify API health shows correct mode
+
+---
+
+## Developer Quick Reference
+
+### One-Command Setup
 
 ```powershell
-python -m pip install -r requirements\ui.txt
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+# Clone, setup, and start in local mode
+git clone <repo-url> && cd riskanalytics_df
+Copy-Item .env.example .env
+python setup_venv.py
+cd risk-analytics-ui; npm install; cd ..
+$env:EXECUTION_MODE = "local"
+.\scripts\start_local.ps1
 ```
 
-Recommended when to run:
+### Common Commands
 
-- After changing risk logic, YAML execution, or configuration parsing.
-- Before rebuilding UI/API images for demo use.
-- Before sharing a branch for review.
+```powershell
+# Activate venv
+.venv\Scripts\activate
+
+# Create tables
+.venv\Scripts\python.exe jobs\bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+
+# Run stage transformation
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer stage --entity customer --source sourcea --as-of-date 2026-07-18
+
+# Run ODS transformation
+.venv\Scripts\python.exe jobs\run_source_to_ods_step.py --layer ods --entity customer --source sourcea --as-of-date 2026-07-18
+
+# Run risk metrics
+.venv\Scripts\python.exe jobs\run_risk_pipeline.py --as-of-date 2026-07-18 --data-model source-to-ods
+
+# Run validation notebook
+.venv\Scripts\jupyter.exe notebook
+```
+
+### Log Files
+
+```powershell
+# View execution logs
+Get-Content logs\pipeline_execution.log -Tail 50
+
+# View Splunk-compatible logs
+Get-Content logs\splunk_pipeline.log -Tail 50
+
+# View structured metrics
+Get-Content logs\pipeline_metrics.json
+```
+
+For detailed validation procedures, see the [Validation and Testing Guide](validation_guide.md).
+
+For monitoring and logging, see [Logging and Monitoring](logging_and_monitoring.md).

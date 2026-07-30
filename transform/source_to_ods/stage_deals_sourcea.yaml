@@ -2,6 +2,10 @@ version: 1
 name: stage_deals_sourcea
 
 sources:
+  - name: deals_file
+    type: file
+    format: json
+    path: '{{deals_sourcea_path}}'
   - name: deals_src
     type: table
     table: nessie.risk_analytics.deals
@@ -11,7 +15,7 @@ sources:
 steps:
   - id: normalize_deals_sourcea
     type: reformat
-    input: deals_src
+    input: deals_file
     operations:
       - op: add_column
         name: source_system

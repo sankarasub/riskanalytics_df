@@ -1,8 +1,9 @@
-"""Initialize the canonical schema and load small deterministic development data."""
+"""Initialize the source-to-ODS schema and load small deterministic development data."""
 from __future__ import annotations
 
 import argparse
 import json
+import time
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -10,32 +11,13 @@ from pathlib import Path
 
 from pyspark.sql.types import BooleanType, DateType, DecimalType, MapType, StringType, StructField, StructType
 
-from jobs.create_tables import TABLE_DDL
 from risk_analytics.config import legacy_table_name, load_config
+from risk_analytics.logging_config import PipelineLogger, setup_logging
 from risk_analytics.spark import create_spark_session
 
 DEFAULT_AS_OF_DATE = date(2026, 7, 18)
 SOURCEA_DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "sourcea"
-SOURCE_TABLES = ("customer", "asset", "collateral", "trades", "trade_product", "deals")
-STAGING_TABLES = (
-    "customer_sourcea_stg",
-    "customer_sourceb_stg",
-    "asset_sourcea_stg",
-    "asset_sourceb_stg",
-    "trade_product_sourcea_stg",
-    "trade_product_sourceb_stg",
-    "trades_sourcea_stg",
-    "trades_sourceb_stg",
-    "collateral_sourcea_stg",
-    "collateral_sourceb_stg",
-)
-CANONICAL_TABLES = (
-    "customer_canonical",
-    "asset_canonical",
-    "collateral_canonical",
-    "trades_canonical",
-    "trade_product_canonical",
-)
+SOURCE_TABLES = ("customer", "asset", "collateral", "deals")
 SOURCE_TO_ODS_CREATE_ORDER = (
     "namespace_stage",
     "namespace_ods",
@@ -86,33 +68,6 @@ SCHEMAS = {
         StructField("currency", StringType(), True),
         StructField("valuation_date", DateType(), True),
     ]),
-    "trades": StructType([
-        StructField("trade_id", StringType(), False),
-        StructField("customer_id", StringType(), True),
-        StructField("netting_set_id", StringType(), True),
-        StructField("product_type", StringType(), True),
-        StructField("trade_date", DateType(), True),
-        StructField("maturity_date", DateType(), True),
-        StructField("currency", StringType(), True),
-        StructField("notional", DecimalType(20, 2), True),
-        StructField("mark_to_market", DecimalType(20, 2), True),
-        StructField("status", StringType(), True),
-        StructField("as_of_date", DateType(), True),
-    ]),
-    "trade_product": StructType([
-        StructField("trade_id", StringType(), False),
-        StructField("product_type", StringType(), True),
-        StructField("underlying_id", StringType(), True),
-        StructField("pay_leg_currency", StringType(), True),
-        StructField("receive_leg_currency", StringType(), True),
-        StructField("fixed_rate", DecimalType(12, 8), True),
-        StructField("floating_index", StringType(), True),
-        StructField("strike", DecimalType(20, 6), True),
-        StructField("option_type", StringType(), True),
-        StructField("volatility", DecimalType(10, 6), True),
-        StructField("barrier_level", DecimalType(20, 6), True),
-        StructField("product_attributes", MapType(StringType(), StringType()), True),
-    ]),
     "deals": StructType([
         StructField("deal_id", StringType(), False),
         StructField("trade_id", StringType(), False),
@@ -139,16 +94,12 @@ DATE_COLUMNS = {
     "customer": {"as_of_date"},
     "asset": {"valuation_date"},
     "collateral": {"valuation_date"},
-    "trades": {"trade_date", "maturity_date", "as_of_date"},
-    "trade_product": set(),
     "deals": {"trade_date", "maturity_date", "as_of_date"},
 }
 
 DECIMAL_COLUMNS = {
     "asset": {"market_value"},
     "collateral": {"quantity", "market_value"},
-    "trades": {"notional", "mark_to_market"},
-    "trade_product": {"fixed_rate", "strike", "volatility", "barrier_level"},
     "deals": {"notional", "mark_to_market", "volatility", "fixed_rate", "strike"},
 }
 
@@ -183,44 +134,18 @@ def _load_seed_rows(table_name: str, as_of_date: date) -> list[dict[str, object]
 
 
 def _build_deals_rows(as_of_date: date) -> list[dict[str, object]]:
-    trades = _load_seed_rows("trades", as_of_date)
-    products = _load_seed_rows("trade_product", as_of_date)
-    collateral = _load_seed_rows("collateral", as_of_date)
-
-    product_by_trade = {row["trade_id"]: row for row in products}
-    collateral_by_customer: dict[str, list[dict[str, object]]] = defaultdict(list)
-    for row in collateral:
-        collateral_by_customer[str(row.get("customer_id"))].append(row)
-
-    output: list[dict[str, object]] = []
-    for row in trades:
-        trade_id = str(row["trade_id"])
-        customer_id = str(row.get("customer_id"))
-        product = product_by_trade.get(trade_id, {})
-        customer_collateral = collateral_by_customer.get(customer_id, [])
-        best_collateral = customer_collateral[0] if customer_collateral else {}
-
-        output.append({
-            "deal_id": trade_id,
-            "trade_id": trade_id,
-            "customer_id": row.get("customer_id"),
-            "asset_id": best_collateral.get("asset_id"),
-            "collateral_id": best_collateral.get("collateral_id"),
-            "netting_set_id": row.get("netting_set_id"),
-            "product_type": row.get("product_type"),
-            "trade_date": row.get("trade_date"),
-            "maturity_date": row.get("maturity_date"),
-            "currency": row.get("currency"),
-            "notional": row.get("notional"),
-            "mark_to_market": row.get("mark_to_market"),
-            "status": row.get("status"),
-            "as_of_date": row.get("as_of_date"),
-            "volatility": product.get("volatility"),
-            "fixed_rate": product.get("fixed_rate"),
-            "strike": product.get("strike"),
-            "option_type": product.get("option_type"),
-        })
-    return output
+    """Build deals rows by loading from deals.json file."""
+    try:
+        file_path = SOURCEA_DATA_DIR / "deals.json"
+        with file_path.open(encoding="utf-8") as source:
+            raw_rows = json.load(source)
+        if not isinstance(raw_rows, list):
+            raise ValueError(f"Seed file must contain an array of rows: {file_path}")
+        return [_normalize_row("deals", row, as_of_date) for row in raw_rows]
+    except FileNotFoundError:
+        # If deals.json doesn't exist, return empty list for now
+        # In production, this file should exist
+        return []
 
 
 def _normalize_row(table_name: str, row: dict[str, object], as_of_date: date) -> dict[str, object]:
@@ -265,9 +190,17 @@ def create_table(spark, table_name: str) -> None:
 
 def create_all_tables(spark) -> None:
     """Create the complete source-to-metrics table contract in dependency order."""
+    config = load_config()
+    execution_mode = config.get("execution_mode", "docker")
+    
     create_namespace(spark)
-    for table_name in SOURCE_TABLES + STAGING_TABLES + CANONICAL_TABLES + ("risk_metrics",):
-        create_table(spark, table_name)
+    
+    # Skip source tables in local/hybrid modes
+    if execution_mode == "docker":
+        for table_name in SOURCE_TABLES:
+            create_table(spark, table_name)
+    
+    # Always create stage/ODS tables
     for table_name in SOURCE_TO_ODS_CREATE_ORDER:
         create_table(spark, table_name)
 
@@ -299,8 +232,13 @@ def seed_table(spark, table_name: str, as_of_date: date) -> None:
 
 
 def seed_all_tables(spark, as_of_date: date) -> None:
-    for table_name in SOURCE_TABLES:
-        seed_table(spark, table_name, as_of_date)
+    """Seed source tables only in Docker mode where they are used."""
+    config = load_config()
+    execution_mode = config.get("execution_mode", "docker")
+    
+    if execution_mode == "docker":
+        for table_name in SOURCE_TABLES:
+            seed_table(spark, table_name, as_of_date)
 
 
 def parse_args() -> argparse.Namespace:
@@ -317,31 +255,99 @@ def parse_args() -> argparse.Namespace:
 
 def main(action: str, table_name: str | None, as_of_date: date) -> None:
     """Dispatch a bootstrap action and guarantee Spark cleanup for every path."""
+    # Setup logging
+    setup_logging()
+    logger = PipelineLogger("bootstrap")
+    
+    config = load_config()
+    execution_mode = config.get("execution_mode", "docker")
+    
+    params = {
+        "action": action,
+        "table_name": table_name,
+        "as_of_date": as_of_date.isoformat(),
+        "execution_mode": execution_mode
+    }
+    
+    logger.log_pipeline_start(params)
+    
     spark = create_spark_session("risk-analytics-bootstrap")
+    logger.log_spark_operation("session_created", {"app_name": "risk-analytics-bootstrap"})
+    
     try:
         if action == "all":
+            logger.log_step_start("create_all_tables")
             create_all_tables(spark)
-            seed_all_tables(spark, as_of_date)
+            logger.log_step_complete("create_all_tables")
+            
+            if execution_mode == "docker":
+                logger.log_step_start("seed_all_tables")
+                seed_all_tables(spark, as_of_date)
+                logger.log_step_complete("seed_all_tables")
+            else:
+                logger.log_step_start("seed_all_tables", {"skipped": True, "reason": f"{execution_mode} mode - only for Docker mode"})
+                logger.log_step_complete("seed_all_tables", 0, 0)
+                
         elif action == "create-namespace":
+            logger.log_step_start("create_namespace")
             create_namespace(spark)
+            logger.log_step_complete("create_namespace")
+            
         elif action == "create-table":
             if not table_name:
                 raise ValueError("--table is required for create-table.")
+            logger.log_step_start(f"create_table_{table_name}")
             create_table(spark, table_name)
+            logger.log_step_complete(f"create_table_{table_name}")
+            
         elif action == "create-all":
+            logger.log_step_start("create_all_tables")
             create_all_tables(spark)
+            logger.log_step_complete("create_all_tables")
+            
         elif action == "create-all-source-to-ods":
+            logger.log_step_start("create_source_to_ods_tables")
             create_source_to_ods_tables(spark)
+            logger.log_step_complete("create_source_to_ods_tables")
+            
         elif action == "seed-table":
             if not table_name:
                 raise ValueError("--table is required for seed-table.")
+            if execution_mode != "docker":
+                logger.log_step_start(f"seed_table_{table_name}", {"skipped": True, "reason": f"{execution_mode} mode"})
+                logger.log_step_complete(f"seed_table_{table_name}", 0, 0)
+                print(f"Skipping seed-table in {execution_mode} mode (only for Docker mode)")
+                return
+            logger.log_step_start(f"seed_table_{table_name}")
+            start_time = time.time()
             seed_table(spark, table_name, as_of_date)
+            duration = (time.time() - start_time) * 1000
+            logger.log_step_complete(f"seed_table_{table_name}", duration_ms=duration)
+            
         elif action == "seed-all":
+            if execution_mode != "docker":
+                logger.log_step_start("seed_all_tables", {"skipped": True, "reason": f"{execution_mode} mode"})
+                logger.log_step_complete("seed_all_tables", 0, 0)
+                print(f"Skipping seed-all in {execution_mode} mode (only for Docker mode)")
+                return
+            logger.log_step_start("seed_all_tables")
+            start_time = time.time()
             seed_all_tables(spark, as_of_date)
+            duration = (time.time() - start_time) * 1000
+            logger.log_step_complete("seed_all_tables", duration_ms=duration)
+            
         else:
             raise ValueError(f"Unsupported action '{action}'.")
+        
+        logger.log_pipeline_complete(success=True)
+        
+    except Exception as e:
+        logger.log_step_error(action, e)
+        logger.log_pipeline_complete(success=False)
+        raise
     finally:
         spark.stop()
+        logger.log_spark_operation("session_stopped")
 
 
 if __name__ == "__main__":

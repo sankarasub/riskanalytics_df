@@ -1,6 +1,6 @@
 # Repository File Guide and Configuration
 
-> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Data Model](data-model-risk-metrics.md) | [Scripts](scripts-reference.md) | [Runbook](runbooks.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
+> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Architecture Simplification](architecture_simplification.md) | [Logging and Monitoring](logging_and_monitoring.md) | [Data Model](data-model-risk-metrics.md) | [Scripts](scripts-reference.md) | [Runbook](runbooks.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
 
 This page is the file-level inventory: every tracked file or folder, why it exists, and when you
 touch it. It then explains the configuration surface. Use
@@ -257,22 +257,13 @@ Update environment URL variables for `links-api` service and corresponding API/U
 
 ## Legacy and Transitional Artifacts
 
-The active published path is STAGE -> ODS -> `nessie.risk_analytics_ods.risk_metrics`. A pre-refactor
-"legacy" data model still ships alongside it, and it is worth knowing exactly what belongs to it so
-you do not debug the wrong pipeline:
+The active published path is STAGE -> ODS -> `nessie.risk_analytics_ods.risk_metrics`. 
 
-| Artifact | State |
-| --- | --- |
-| `transform/<entity>_Source<A\|B>_transform.yaml` (10 files) | Write the legacy `nessie.risk_analytics.*_stg` tables. No DAG, script, or test runs them. |
-| `transform/risk_metrics_pipeline.yaml` | Reads the `*_canonical` tables. Only reachable through `run_risk_pipeline.py --data-model legacy`. |
-| `*_canonical` and `*_stg` tables in `nessie.risk_analytics` | Created by `jobs/create_tables.py` but never populated by the active flow, so a legacy run returns zero rows. |
-| `data/sourcea/trades.json`, `data/sourcea/trade_product.json` | Seed the legacy `trades` / `trade_product` source tables; the active model uses `deals`. |
-| `data/sourceb/product`, `data/sourceb/trans` | Source B inputs for the legacy product/trans transforms. |
-
-`--data-model legacy` is still the default flag value of `jobs/run_risk_pipeline.py`, while every DAG
-and script passes `--data-model source-to-ods` explicitly. If you invoke the job by hand, pass the
-flag. Removing the legacy model entirely (YAMLs, DDL, seeds, and the flag) is a safe follow-up once
-you are sure nothing external reads those tables.
+**Note:** The legacy data model using canonical tables has been removed. The system now uses only the source-to-ODS architecture:
+- Source tables in `nessie.risk_analytics` (customer, asset, collateral, deals)
+- Stage tables in `nessie.risk_analytics_stage` (normalized by source)
+- ODS tables in `nessie.risk_analytics_ods` (standardized across sources)
+- Risk metrics in `nessie.risk_analytics_ods.risk_metrics`
 
 ## Production Deployment Reference
 

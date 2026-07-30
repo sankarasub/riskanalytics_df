@@ -1,0 +1,33 @@
+# Docker execution mode - current production setup
+execution_mode: docker
+spark_mode: cluster
+catalog:
+  name: nessie
+  type: remote
+  uri: http://nessie:19120/api/v2
+  namespace: risk_analytics
+  stage_namespace: risk_analytics_stage
+  ods_namespace: risk_analytics_ods
+  warehouse: s3a://risk-analytics-lakehouse/warehouse
+storage:
+  type: s3
+  endpoint: http://seaweedfs:8333
+  bucket: risk-analytics-lakehouse
+  access_key: risk_analytics_admin
+  secret_key: risk_analytics_local_development_secret
+orchestration: airflow
+streaming: enabled
+kafka:
+  bootstrap_servers: kafka:9092
+  topics:
+    ingest_prefix: risk
+    trigger_topic: risk.pipeline.trigger
+airflow:
+  api_url: http://airflow-webserver:8088/api/v1
+  username: admin
+  password: admin
+ui:
+  type: react
+  backend: fastapi
+  port: 3000
+  api_port: 8000

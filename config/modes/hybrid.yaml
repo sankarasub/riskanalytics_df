@@ -1,0 +1,33 @@
+# Hybrid execution mode - Local Spark, remote catalog/storage
+execution_mode: hybrid
+spark_mode: local
+catalog:
+  name: nessie
+  type: remote
+  uri: http://localhost:19120/api/v2
+  namespace: risk_analytics
+  stage_namespace: risk_analytics_stage
+  ods_namespace: risk_analytics_ods
+  warehouse: s3a://risk-analytics-lakehouse/warehouse
+storage:
+  type: s3
+  endpoint: http://localhost:8333
+  bucket: risk-analytics-lakehouse
+  access_key: risk_analytics_admin
+  secret_key: risk_analytics_local_development_secret
+orchestration: scripts
+streaming: optional
+kafka:
+  bootstrap_servers: localhost:29092
+  topics:
+    ingest_prefix: risk
+    trigger_topic: risk.pipeline.trigger
+airflow:
+  api_url: http://localhost:8088/api/v1
+  username: admin
+  password: admin
+ui:
+  type: react
+  backend: fastapi
+  port: 3000
+  api_port: 8000

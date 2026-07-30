@@ -2,19 +2,12 @@ version: 1
 name: risk_metrics_pipeline
 
 sources:
-  - name: trades
+  - name: deals
     type: table
-    table: nessie.risk_analytics.trades_canonical
+    table: nessie.risk_analytics_ods.deals
     filters:
       - as_of_date = '{{as_of_date}}'
       - status = 'ACTIVE'
-
-  - name: products
-    type: table
-    table: nessie.risk_analytics.trade_product_canonical
-    select:
-      - trade_id
-      - volatility
 
   - name: collateral_raw
     type: table
@@ -36,23 +29,12 @@ sources:
     value_column: haircut
 
 steps:
-  - id: join_trades_products
-    type: join
-    input: trades
-    joins:
-      - dataset: products
-        on:
-          - trade_id
-        how: left
-    emit:
-      output: trades_with_products
-
-  - id: trade_reformat
+  - id: deal_reformat
     type: reformat
-    input: trades_with_products
+    input: deals
     operations:
       - op: add_column
-        name: trade_exposure
+        name: deal_exposure
         expression:
           op: greatest
           args:
@@ -66,18 +48,18 @@ steps:
             - col: volatility
             - config: risk.default_volatility
     emit:
-      output: trades_prepared
+      output: deals_prepared
 
   - id: netting_rollup
     type: rollup
-    input: trades_prepared
+    input: deals_prepared
     group_by:
       - customer_id
       - netting_set_id
     aggregations:
       - name: gross_exposure
         op: sum
-        col: trade_exposure
+        col: deal_exposure
       - name: mark_to_market_sum
         op: sum
         col: mark_to_market

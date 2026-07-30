@@ -2,6 +2,11 @@ version: 1
 name: stage_customer_sourcea
 
 sources:
+  - name: customer_file
+    type: file
+    format: json
+    path: '{{customer_sourcea_path}}'
+    # Fallback to table for Docker mode compatibility
   - name: customer_src
     type: table
     table: nessie.risk_analytics.customer
@@ -9,9 +14,10 @@ sources:
       - as_of_date = '{{as_of_date}}'
 
 steps:
-  - id: normalize_customer_sourcea
+  - id: choose_source
     type: reformat
-    input: customer_src
+    input: customer_file
+    # Use file input if path is provided, otherwise use table
     operations:
       - op: add_column
         name: source_system

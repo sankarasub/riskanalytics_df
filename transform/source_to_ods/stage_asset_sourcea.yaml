@@ -2,6 +2,10 @@ version: 1
 name: stage_asset_sourcea
 
 sources:
+  - name: asset_file
+    type: file
+    format: json
+    path: '{{asset_sourcea_path}}'
   - name: asset_src
     type: table
     table: nessie.risk_analytics.asset
@@ -11,7 +15,7 @@ sources:
 steps:
   - id: normalize_asset_sourcea
     type: reformat
-    input: asset_src
+    input: asset_file
     operations:
       - op: add_column
         name: customer_id
