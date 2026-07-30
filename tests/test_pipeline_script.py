@@ -12,7 +12,8 @@ LEGACY_DAG_IDS = (
     "risk_analytics_kafka_customer_ods",
     "risk_analytics_risk_pipeline",
 )
-EXECUTABLE_DIRS = ("airflow", "api", "jobs", "risk_analytics", "scripts", "ui")
+SCANNED_DIRS = (".vscode", "airflow", "api", "jobs", "risk_analytics", "scripts", "ui")
+SCANNED_SUFFIXES = frozenset({".py", ".ps1", ".yaml", ".yml", ".sh", ".json"})
 
 
 class PipelineScriptTests(unittest.TestCase):
@@ -45,9 +46,9 @@ class PipelineScriptTests(unittest.TestCase):
 
     def test_no_executable_file_references_legacy_dag_ids(self) -> None:
         offenders = []
-        for directory in EXECUTABLE_DIRS:
+        for directory in SCANNED_DIRS:
             for path in sorted((REPO_ROOT / directory).rglob("*")):
-                if not path.is_file() or path.suffix not in {".py", ".ps1", ".yaml", ".yml", ".sh"}:
+                if not path.is_file() or path.suffix not in SCANNED_SUFFIXES:
                     continue
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 for legacy_dag_id in LEGACY_DAG_IDS:

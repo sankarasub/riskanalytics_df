@@ -40,12 +40,11 @@ The delivery demonstrates production-minded data engineering practices in a port
 ## Documentation Map
 
 - [Framework Overview, System Design & Tech Stack](architecture.md): architecture, runtime flow, and execution paths.
-- [Architecture Diagrams](architecture-diagram.md): component, orchestration, streaming, and lineage diagrams.
 - [Data Model and Risk Metrics](data-model-risk-metrics.md): table contracts, lineage, formulas, and worked examples.
 - [Platform Interfaces and Operations](platform-interfaces-and-operations.md): dashboard, orchestration, SQL, notebook, and messaging interfaces.
 - [Runbook and Local Execution](runbooks.md): setup, first run, offline run, and local no-Airflow execution.
 - [Scripts Reference](scripts-reference.md): why each `scripts/` entry exists, when to use it, and the steps it performs.
-- [Repository Map & Configuration Guide](project-reference.md): file-level reference and configuration controls.
+- [Repository File Guide & Configuration](project-reference.md): what every file in the repository is for, plus configuration controls.
 - [Metadata-Driven Architecture and YAML Patterns](metadata-driven-architecture.md): how YAML pipelines are authored and executed.
 
 Continue with [Framework Overview, System Design & Tech Stack](architecture.md) for technical context or [Runbook and Local Execution](runbooks.md) to run the platform.

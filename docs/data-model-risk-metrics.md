@@ -15,7 +15,7 @@ The active source-to-ODS flow standardizes four entities:
 
 There is no standalone product entity in the active ODS risk path. Volatility defaults and other risk assumptions are configuration-driven.
 
-Kafka ingestion is designed to feed customer, asset, collateral, and deals entity streams into the stage layer, then ODS, before risk processing.
+Kafka ingestion feeds customer, asset, collateral, and deals entity streams into the source tables, then STAGE and ODS, before risk processing. See [Kafka Streaming Contracts](#kafka-streaming-contracts).
 
 ## Table Layers and Contracts
 
@@ -25,6 +25,43 @@ Kafka ingestion is designed to feed customer, asset, collateral, and deals entit
 | Stage | `nessie.risk_analytics_stage` | Source-specific normalization boundary | `customer_stage_sourcea`, `deals_stage_sourceb` |
 | ODS | `nessie.risk_analytics_ods` | Standard business contracts across sources | `customer`, `asset`, `collateral`, `deals` |
 | Published metrics | `nessie.risk_analytics_ods` | Query-ready risk output | `risk_metrics` |
+
+## Kafka Streaming Contracts
+
+There are no Kafka-only tables. Streaming and batch share the same Iceberg contracts: the consumer
+appends to the source tables in `nessie.risk_analytics`, and the same STAGE and ODS YAML pipelines
+then process those rows. This is why a streamed micro-batch and a file-based batch load produce
+identical ODS output.
+
+`jobs/kafka_entity_consumer.py` (the `kafka-entity-stream` service) subscribes to the ingest topics
+with Spark Structured Streaming, decodes each JSON payload with the entity's schema, drops rows with
+a null key column, and appends:
+
+| Ingest topic | Target Iceberg table | Key column | Date column used for the trigger |
+| --- | --- | --- | --- |
+| `risk.customer.ingest` | `nessie.risk_analytics.customer` | `customer_id` | `as_of_date` |
+| `risk.asset.ingest` | `nessie.risk_analytics.asset` | `asset_id` | `valuation_date` |
+| `risk.collateral.ingest` | `nessie.risk_analytics.collateral` | `collateral_id` | `valuation_date` |
+| `risk.deals.ingest` | `nessie.risk_analytics.deals` | `deal_id` | `as_of_date` |
+
+Message payloads use the source contract columns listed in
+[Source Contracts](#source-contracts-nessierisk_analytics); the consumer casts them to the target
+types, so dates and decimals may be sent as strings.
+
+Two control topics carry no data, only signals:
+
+- `risk.pipeline.trigger`: one message per entity touched by a micro-batch, carrying `entity`,
+  `as_of_date`, and `source` (payload built by `risk_analytics/kafka_events.py`). Each
+  `ra_kafka_<entity>_stage` sensor matches only its own entity.
+- `risk.metrics.published`: emitted after a successful risk run with `as_of_date`, `run_id`, and
+  `row_count`.
+
+Example payloads, CLI/Python producer snippets, and the full topic-to-DAG matrix are in
+[Kafka Runtime Details](platform-interfaces-and-operations.md#kafka-runtime-details).
+
+Micro-batches trigger every 30 seconds, start from the latest offsets, and checkpoint at
+`/tmp/checkpoints/kafka_entity_stream`, so restarting the service replays only from its last
+committed offsets. An empty batch publishes no trigger event.
 
 ## Table and Column Reference
 
@@ -114,17 +151,17 @@ flowchart TD
 
 For `as_of_date = 2026-07-18`:
 
-1. Kafka/entity loaders append source records into `nessie.risk_analytics.customer|asset|collateral|deals`.
+1. Batch seeding or the Kafka consumer appends source records into `nessie.risk_analytics.customer|asset|collateral|deals`.
 2. Stage transforms write source-specific normalized tables in `nessie.risk_analytics_stage.*`.
 3. ODS merges consolidate source records into `nessie.risk_analytics_ods.customer|asset|collateral|deals`.
 4. Risk pipeline reads ODS deals and collateral+asset joins, computes metrics, and writes `nessie.risk_analytics_ods.risk_metrics`.
 
 ## Risk Logic Used
 
-The formulas are implemented in two equivalent paths:
-
-- Python path: `jobs/risk_pipeline.py`
-- YAML path: `transform/source_to_ods/risk_metrics_pipeline_source_to_ods.yaml`
+The formulas live in one place only, the YAML pipeline
+`transform/source_to_ods/risk_metrics_pipeline_source_to_ods.yaml`, which
+`jobs/run_risk_pipeline.py` executes through the YAML executor. Editing that file changes the
+published metrics; there is no parallel Python implementation to keep in sync.
 
 ### Definitions
 
