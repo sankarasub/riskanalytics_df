@@ -1,10 +1,38 @@
 #!/usr/bin/env python3
 """Local platform health checks for the Risk Analytics lakehouse stack.
 
+Why this script exists
+----------------------
+Compose reports whether containers are *up*, not whether the services inside
+them answer. This script probes every endpoint a developer or DAG depends on, so
+a failed pipeline can be attributed to a specific service instead of guessing.
+It is the script `scripts/run_risk_analytics_pipeline.ps1` runs as its final
+validation step, and it is safe to run at any time.
+
+What it does, in order
+----------------------
+1. HTTP probes: Nessie REST, SeaweedFS S3 + master, Spark master/worker UIs,
+   Airflow, JupyterLab, both Streamlit UIs, the operations API, Dremio, Kafka UI.
+2. TCP probes: Spark master RPC, Spark Connect gRPC, Postgres.
+3. Optional (`--check-iceberg`): a real Spark Connect query against
+   `nessie.risk_analytics_ods` to prove the catalog and `risk_metrics` are
+   readable. This only passes after a pipeline run has published metrics.
+4. Prints a table and exits non-zero only when a *required* check fails;
+   optional checks degrade to WARN so the script stays usable mid-bootstrap.
+
+Related scripts: `scripts/validate_pipeline_status.py` (Airflow/Nessie/Spark
+correctness of the DAG inventory and data) and `scripts/validate_dags.py`
+(DAG parsing, no platform required).
+
 Usage examples:
   python scripts/health_check.py
   python scripts/health_check.py --host localhost --timeout 5
   python scripts/health_check.py --check-iceberg
+
+From the host against containers, pass the Docker-internal host used by the
+UI containers:
+  docker compose exec business-ui python /opt/risk_analytics/scripts/health_check.py
+      --host host.docker.internal --postgres-host postgres --check-iceberg
 """
 from __future__ import annotations
 
@@ -153,7 +181,11 @@ def main() -> int:
         HttpCheck("jupyterlab", f"http://{host}:8888", {200, 302}),
         HttpCheck("business-ui", f"http://{host}:8501/_stcore/health", {200}),
         HttpCheck("developer-ui", f"http://{host}:8502/_stcore/health", {200}, required=False),
+        # The operations API answers 200 even when a component is degraded, so
+        # this probe covers reachability only; read the payload for detail.
+        HttpCheck("operations-api", f"http://{host}:8000/health?include_spark=false", {200}),
         HttpCheck("dremio-ui", f"http://{host}:9047", {200, 302, 307}),
+        HttpCheck("kafka-ui", f"http://{host}:8090", {200, 302}, required=False),
     ]
 
     tcp_checks = [

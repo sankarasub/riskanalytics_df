@@ -186,7 +186,15 @@ You can either run the jobs manually, or use the helper script in [scripts/run_r
 
    `offline` mode is strict: it starts only locally cached images with no image pull, build, or runtime dependency download. If required images are absent, it stops and directs you to run `first-build` while connected.
 
-   The helper starts the Docker platform, runs bootstrap, runs all source-to-ODS stage and ODS jobs, runs the final risk pipeline, and finishes with a validation query that checks the loaded tables.
+   The helper starts the Docker platform, verifies that all 27 `ra_*` DAGs are registered, unpauses them, triggers `ra_createtables_and_data`, waits for the bootstrap, orchestration, and `ra_riskmetrics_eval_ods` runs to succeed, and finishes with a validation query that checks the loaded tables.
+
+   If Airflow does not know the expected DAGs, the script stops with the remediation steps instead of triggering an unknown DAG. If Airflow still lists pre-refactor `risk_analytics_*` DAGs (metadata from an earlier revision that has no DAG file), the script warns; add `-RemoveLegacyDags` to delete those entries:
+
+   ```powershell
+   .\scripts\run_risk_analytics_pipeline.ps1 -AsOfDate 2026-07-18 -RemoveLegacyDags
+   ```
+
+   The wait is bounded by `-WaitTimeoutMinutes` (default 60). Use `-SkipPipelineWait` to trigger and return immediately, accepting that the validation query can run before the ODS tables exist.
 
    Add `-OpenEndpoints` if you want the script to open the main browser pages after a successful run:
 
@@ -350,7 +358,14 @@ VS Code task usage:
 2. Select `risk-analytics-health-check` for standard checks.
 3. Select `risk-analytics-health-check-iceberg` for the deep catalog/query check.
 
-The script exits with code `0` on success and `1` if any required check fails.
+The script exits with code `0` on success and `1` if any required check fails. It answers "are the
+services reachable?"; run [scripts/validate_pipeline_status.py](scripts/validate_pipeline_status.py)
+for the next question, "is the platform loaded correctly?" — it compares Airflow's registered DAGs
+against the 27 shipped `ra_*` DAGs, flags leftover `risk_analytics_*` metadata and paused DAGs, and
+queries the ODS layer.
+
+Every script in `scripts/` — why it exists, when to use it, and what each step does — is documented in
+[docs/scripts-reference.md](docs/scripts-reference.md).
 
 ### Query the lakehouse in Dremio
 

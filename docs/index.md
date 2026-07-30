@@ -44,6 +44,7 @@ The delivery demonstrates production-minded data engineering practices in a port
 - [Data Model and Risk Metrics](data-model-risk-metrics.md): table contracts, lineage, formulas, and worked examples.
 - [Platform Interfaces and Operations](platform-interfaces-and-operations.md): dashboard, orchestration, SQL, notebook, and messaging interfaces.
 - [Runbook and Local Execution](runbooks.md): setup, first run, offline run, and local no-Airflow execution.
+- [Scripts Reference](scripts-reference.md): why each `scripts/` entry exists, when to use it, and the steps it performs.
 - [Repository Map & Configuration Guide](project-reference.md): file-level reference and configuration controls.
 - [Metadata-Driven Architecture and YAML Patterns](metadata-driven-architecture.md): how YAML pipelines are authored and executed.
 

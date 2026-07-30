@@ -39,6 +39,7 @@ nav:
   - Data Model and Risk Metrics: data-model-risk-metrics.md
   - Platform Interfaces and Operations: platform-interfaces-and-operations.md
   - Runbook and Local Execution: runbooks.md
+  - Scripts Reference: scripts-reference.md
   - Production Setup: production_setup.md
   - Testing: testing.md
   - Repository Map & Configuration Guide: project-reference.md

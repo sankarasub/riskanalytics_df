@@ -1,6 +1,6 @@
 # Runbook and Local Execution
 
-> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Interfaces](platform-interfaces-and-operations.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
+> Quick links: [Overview](index.md) | [Architecture](architecture.md) | [Interfaces](platform-interfaces-and-operations.md) | [Scripts Reference](scripts-reference.md) | [Production Setup](production_setup.md) | [Testing](testing.md) | [Troubleshooting](troubleshooting.md)
 
 This is the primary operations guide for setting up and running the platform.
 
@@ -29,10 +29,13 @@ Use after clone or dependency changes.
 What it does:
 
 - Builds and starts required services
-- Creates tables and seeds data
-- Runs source-to-ODS stage and ODS flows
-- Runs final risk pipeline
-- Runs validation checks
+- Verifies all 27 `ra_*` DAGs are registered, then unpauses them
+- Triggers `ra_createtables_and_data`: creates tables and seeds data
+- Waits for the STAGE/ODS orchestration and the final risk metrics run to succeed
+- Runs validation checks against the published tables
+
+See [Scripts Reference](scripts-reference.md) for the full step list, the other run scripts, and
+when to use each.
 
 ### Mode B: Regular offline run
 

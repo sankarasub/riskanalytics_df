@@ -69,6 +69,11 @@ The current coverage includes:
 - `tests/test_api_triggers.py`
   - Validates the `/pipeline/execute` targets and rejects unknown entities and sources
 
+- `tests/test_pipeline_script.py`
+  - Asserts the PowerShell helper triggers `ra_createtables_and_data` and covers all 27 DAG IDs
+  - Asserts registration is verified before triggering, and the pipeline is awaited before validating
+  - Fails if any executable file references a pre-refactor `risk_analytics_*` DAG ID
+
 ## How To Run
 
 Run the suite from the repository root:
