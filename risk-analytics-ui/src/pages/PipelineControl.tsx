@@ -6,7 +6,7 @@ import ExecutionModeSelector from '../components/platform/ExecutionModeSelector'
 
 const PipelineControl = () => {
   const { status, loading, error, fetchStatus, triggerBootstrap, triggerOrchestration, triggerRiskMetrics, triggerStage, triggerOds } = usePipelineStore();
-  const { config, updateConfig } = usePlatformStore();
+  const { config } = usePlatformStore();
   
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
   const [entity, setEntity] = useState('customer');

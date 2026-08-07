@@ -4,6 +4,123 @@
 
 This page collects practical commands for common development and operations scenarios.
 
+## Windows-Specific Issues
+
+### PySpark FileNotFoundError on Windows
+
+**Problem:**
+```
+FileNotFoundError: [WinError 2] The system cannot find the file specified
+```
+
+**Cause:**
+PySpark has known compatibility issues with Windows subprocess execution and Hadoop library dependencies.
+
+**Solutions:**
+1. **Use WSL for Spark jobs** (recommended)
+2. **Use Docker for full platform**
+3. **Use React UI/API mode** for Windows development (no Spark required)
+
+See [Windows Setup Guide](windows_setup.md) for detailed instructions.
+
+### Port Conflicts on Windows
+
+**Problem:**
+Frontend or backend won't start due to port conflicts.
+
+**Solution:**
+```powershell
+# Find processes using port 5173 or 8000
+Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | Select-Object OwningProcess
+
+# Kill conflicting processes
+Stop-Process -Id <process_id> -Force
+```
+
+### React UI Blank Page on Windows
+
+**Problem:**
+React UI loads but shows blank page with Material-UI errors.
+
+**Solution:**
+1. Check browser console for JavaScript errors (F12)
+2. Clear browser cache and hard refresh (Ctrl+Shift+R)
+3. Rebuild the frontend:
+
+```powershell
+cd risk-analytics-ui
+npm run build
+```
+
+### Module Import Errors on Windows
+
+**Problem:**
+```
+ModuleNotFoundError: No module named 'risk_analytics'
+```
+
+**Solution:**
+All job scripts now automatically add the project root to Python path. If you still encounter this:
+
+```powershell
+# Ensure you're in the project directory
+cd D:\riskanalytics_df
+
+# Use the virtual environment Python
+.venv\Scripts\python.exe jobs\bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+```
+
+### Python Version Issues on Windows
+
+**Problem:**
+```
+Python 3.11 is required to match the Docker runtime images; found 3.13.2
+```
+
+**Solution:**
+```powershell
+# Install Python 3.11
+py -3.11 --version
+
+# If not available, install it
+winget install Python.Python.3.11
+
+# Then run setup script
+py -3.11 setup_venv.py
+```
+
+## General Issues
+
+### Dependency Conflicts
+
+**Problem:**
+```
+ERROR: Cannot install protobuf==6.31.1 and protobuf==6.33.0
+```
+
+**Solution:**
+The protobuf version conflict has been fixed in the requirements files. Ensure you have the latest versions:
+
+```powershell
+cd D:\riskanalytics_df
+git pull
+py -3.11 setup_venv.py
+```
+
+## Getting Help
+
+If you encounter issues not covered here:
+
+1. Check the [Windows Setup Guide](windows_setup.md) for Windows-specific solutions
+2. Review the [Local Development Guide](local_development.md) for mode-specific issues
+3. Check the [Architecture documentation](architecture.md) for system design context
+4. Review the [Runbooks](runbooks.md) for step-by-step procedures
+5. Open an issue on GitHub with:
+   - Your environment (Windows/Linux/Mac, WSL/Docker)
+   - Execution mode (local/hybrid/docker)
+   - Full error message
+   - Steps to reproduce
+
 ## Quick Platform State
 
 ```powershell

@@ -12,6 +12,7 @@ What makes it more than a demo:
 - **Batch and streaming share one contract.** Kafka events land in the same source tables as the batch seed, so both paths use the same STAGE/ODS YAML and produce identical ODS output.
 - **Flexible execution modes.** Run locally without Docker (fastest development), hybrid mode (local Spark + remote catalog/storage), or full Docker stack (production-like).
 - **Unified React UI.** Single modern web application combining business dashboard, developer tools, data explorer, and configuration management.
+- **Windows Support.** Run on Windows using WSL (Windows Subsystem for Linux) for full Spark functionality, or use the React UI/API directly on Windows.
 
 ## At a glance
 
@@ -164,7 +165,60 @@ Ports and credentials for each of these are in [Open the applications](#open-the
 
 ## How to start and run
 
-The platform supports three execution modes:
+The platform supports multiple execution modes and environments:
+
+### Windows Users
+
+**Option 1: React UI/API (Recommended for Windows)**
+```powershell
+# Install Python 3.11
+py -3.11 --version
+
+# Set up virtual environment
+py -3.11 setup_venv.py
+
+# Start the platform
+.\scripts\start_local.ps1
+```
+Access:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+**Option 2: WSL (For Full Spark Functionality)**
+```powershell
+# Install WSL
+wsl --install
+
+# In WSL terminal:
+cd /mnt/d/riskanalytics_df
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements/dev.txt -r requirements/notebook.txt -r requirements/docs.txt -r requirements/airflow.txt -r requirements/spark.txt -r requirements/ui.txt
+python jobs/bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+```
+
+**Option 3: Docker (Full Production Stack)**
+```powershell
+docker-compose up
+```
+
+### Linux/Mac Users
+
+**Option 1: Local Mode**
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements/dev.txt -r requirements/notebook.txt -r requirements/docs.txt -r requirements/airflow.txt -r requirements/spark.txt -r requirements/ui.txt
+python jobs/bootstrap.py --action create-all-source-to-ods --as-of-date 2026-07-18
+```
+
+**Option 2: Docker Mode**
+```bash
+docker-compose up
+```
+
+### Execution Modes
 
 1. **Local Mode** (Fastest): Everything runs locally without Docker - no external services required
 2. **Hybrid Mode** (Recommended): Local Spark + remote catalog/storage (Nessie + SeaweedFS)
@@ -173,7 +227,7 @@ The platform supports three execution modes:
 ### Prerequisites
 
 **For all modes:**
-- Python 3.8+
+- Python 3.11+ (required to match Docker runtime images; WSL Ubuntu 26.04 uses Python 3.14)
 - Node.js 16+ and npm (for React UI)
 - Required Python packages (install from requirements files)
 
@@ -188,6 +242,10 @@ The platform supports three execution modes:
 
 **For hybrid mode:**
 - Docker for running Nessie and SeaweedFS only
+
+**For Windows PySpark support:**
+- WSL (Windows Subsystem for Linux) recommended for full Spark functionality
+- React UI/API works directly on Windows without Spark
 
 ### Choose Your Execution Mode
 

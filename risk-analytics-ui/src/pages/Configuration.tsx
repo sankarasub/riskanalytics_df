@@ -34,7 +34,7 @@ const Configuration = () => {
   };
 
   const handleFieldChange = (section: string, field: string, value: any) => {
-    setEditableConfig(prev => ({
+    setEditableConfig((prev: any) => ({
       ...prev,
       [section]: {
         ...prev[section],

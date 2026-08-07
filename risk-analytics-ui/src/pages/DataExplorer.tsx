@@ -9,7 +9,7 @@ const DataExplorer = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, _setRowsPerPage] = useState(10);
 
   const fetchTables = async () => {
     setLoading(true);
@@ -47,7 +47,7 @@ const DataExplorer = () => {
     if (selectedTable) {
       fetchTableData(selectedTable);
     }
-  }, [selectedTable, page, rowsPerPage]);
+  }, [selectedTable, page]);
 
   const handleTableChange = (tableName: string) => {
     setSelectedTable(tableName);
@@ -55,13 +55,8 @@ const DataExplorer = () => {
     setTableData(null);
   };
 
-  const handlePageChange = (event: unknown, newPage: number) => {
+  const handlePageChange = (_event: unknown, newPage: number) => {
     setPage(newPage);
-  };
-
-  const handleRowsPerPageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
   };
 
   return (

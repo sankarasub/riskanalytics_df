@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ThemeProvider, CssBaseline } from '@mui/material'
+import { ThemeProvider, CssBaseline, createTheme } from '@mui/material'
 import Layout from './components/common/Layout'
 import Dashboard from './pages/Dashboard'
 import RiskMetrics from './pages/RiskMetrics'
@@ -13,6 +13,17 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
+    },
+  },
+})
+
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
     },
   },
 })
@@ -36,17 +47,6 @@ function App() {
       </ThemeProvider>
     </QueryClientProvider>
   )
-}
-
-const theme = {
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
 }
 
 export default App

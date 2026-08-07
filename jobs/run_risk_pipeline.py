@@ -4,10 +4,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 from risk_analytics.config import load_config
 from risk_analytics.logging_config import PipelineLogger, setup_logging

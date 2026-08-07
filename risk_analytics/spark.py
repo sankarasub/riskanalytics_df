@@ -2,10 +2,56 @@
 from __future__ import annotations
 
 import os
+import sys
+import subprocess
+import platform
 
 from pyspark.sql import SparkSession
 
 from risk_analytics.config import load_config
+
+# Ensure JAVA_HOME is set for PySpark
+if not os.environ.get("JAVA_HOME"):
+    java_home = "C:\\Program Files\\Java\\jdk-24"
+    if os.path.exists(java_home):
+        os.environ["JAVA_HOME"] = java_home
+        os.environ["PATH"] = f"{java_home}\\bin;" + os.environ.get("PATH", "")
+
+# Find Java executable and set PySpark environment variables
+java_executable = None
+if os.environ.get("JAVA_HOME"):
+    java_home = os.environ["JAVA_HOME"]
+    if os.name == "nt":
+        java_executable = os.path.join(java_home, "bin", "java.exe")
+    else:
+        java_executable = os.path.join(java_home, "bin", "java")
+    
+    if not os.path.exists(java_executable):
+        # Try to find java in PATH
+        try:
+            java_executable = subprocess.check_output(["where", "java"], text=True).strip().split('\n')[0]
+        except:
+            pass
+
+# Set PySpark environment variables for Windows
+if os.name == "nt":
+    os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
+    os.environ["PYSPARK_PYTHON"] = sys.executable
+    os.environ["HADOOP_HOME"] = os.environ.get("HADOOP_HOME", "")
+    
+    # Fix for Windows PySpark subprocess issues
+    if java_executable and os.path.exists(java_executable):
+        java_dir = os.path.dirname(java_executable)
+        os.environ["PATH"] = java_dir + ";" + os.environ.get("PATH", "")
+    
+    # Override subprocess to use shell=True on Windows
+    import subprocess
+    original_popen = subprocess.Popen
+    def windows_popen_fix(*args, **kwargs):
+        if os.name == "nt" and 'shell' not in kwargs:
+            kwargs['shell'] = True
+        return original_popen(*args, **kwargs)
+    subprocess.Popen = windows_popen_fix
 
 
 def create_spark_session(app_name: str, ref: str = "main", mode: str = None) -> SparkSession:
@@ -53,6 +99,17 @@ def _create_local_spark_session(cfg: dict, app_name: str, ref: str, execution_mo
     
     if catalog_type == "local":
         # Use local Iceberg catalog with file-based storage
+        java_home = os.environ.get("JAVA_HOME", "C:\\Program Files\\Java\\jdk-24")
+        
+        # Windows-specific configuration to avoid subprocess issues
+        if os.name == "nt":
+            # Configure Spark to use the system Python instead of trying to launch subprocesses
+            builder = (
+                builder
+                .config("spark.python.worker.reuse", "true")
+                .config("spark.python.use.daemon", "false")
+            )
+        
         return (
             builder
             .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
@@ -60,6 +117,11 @@ def _create_local_spark_session(cfg: dict, app_name: str, ref: str, execution_mo
             .config("spark.sql.catalog.local.catalog-impl", "org.apache.iceberg.hadoop.HadoopCatalog")
             .config("spark.sql.catalog.local.warehouse", cfg["catalog"]["warehouse"])
             .config("spark.sql.defaultCatalog", "local")
+            .config("spark.java.home", java_home)
+            .config("spark.driver.extraJavaOptions", f"-Djava.home={java_home}")
+            .config("spark.executor.extraJavaOptions", f"-Djava.home={java_home}")
+            .config("spark.pyspark.driver.python", sys.executable)
+            .config("spark.pyspark.python", sys.executable)
             .getOrCreate()
         )
     else:

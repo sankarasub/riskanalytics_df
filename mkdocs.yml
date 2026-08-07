@@ -65,6 +65,9 @@ nav:
       - Dependency Download, Cache, and Images Guide: dependency-cache-guide.md
       - Logging and Monitoring: logging_and_monitoring.md
   - Develop:
+      - Local Development Guide: local_development.md
+      - Windows Setup Guide: windows_setup.md
+      - WSL Commands: wsl_commands.md
       - Repository File Guide & Configuration: project-reference.md
       - Testing: testing.md
       - Validation and Testing Guide: validation_guide.md

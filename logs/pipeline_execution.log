@@ -1,0 +1,180 @@
+2026-08-03 07:45:12 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: docker
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "docker"
+}
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:45:12.724427
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: nessie
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: remote
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: http://nessie:19120/api/v2
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: s3
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: cluster
+2026-08-03 07:45:12 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: airflow
+2026-08-03 07:45:19 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:45:19.179182
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 07:45:19 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts
+2026-08-03 07:45:31 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:45:31.438614
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 07:45:31 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts
+2026-08-03 07:46:29 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:46:29.717707
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 07:46:29 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts
+2026-08-03 07:46:52 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:46:52.292775
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 07:46:52 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts
+2026-08-03 07:50:32 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:50:32 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:50:32 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:50:32 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: docker
+2026-08-03 07:50:32 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "docker"
+}
+2026-08-03 07:50:32 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:50:32.965333
+2026-08-03 07:50:32 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: nessie
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: remote
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: http://nessie:19120/api/v2
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: s3
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: cluster
+2026-08-03 07:50:33 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: airflow
+2026-08-03 07:51:35 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T07:51:35.392610
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 07:51:35 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts
+2026-08-03 08:10:23 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T08:10:23.200222
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 08:10:23 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts
+2026-08-03 08:11:44 | INFO | root | logging_config.py:85 | setup_logging | Logging system initialized
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:109 | log_pipeline_start | ================================================================================
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:110 | log_pipeline_start | PIPELINE START: bootstrap
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:111 | log_pipeline_start | Execution Mode: local
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:112 | log_pipeline_start | Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:113 | log_pipeline_start | Start Time: 2026-08-03T08:11:44.933249
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:114 | log_pipeline_start | ================================================================================
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:125 | _log_connection_details | CONNECTION DETAILS:
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:126 | _log_connection_details |   Catalog: local
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:127 | _log_connection_details |   Catalog Type: local
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:128 | _log_connection_details |   Catalog URI: file:///tmp/iceberg
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:129 | _log_connection_details |   Storage Type: local
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:130 | _log_connection_details |   Storage Endpoint: http://seaweedfs:8333
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:131 | _log_connection_details |   Spark Mode: local
+2026-08-03 08:11:44 | INFO | pipeline.bootstrap | logging_config.py:132 | _log_connection_details |   Orchestration: scripts

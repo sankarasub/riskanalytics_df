@@ -16,10 +16,11 @@ if (-not (Test-Path $dataDir)) {
 # Start the FastAPI backend
 Write-Host "Starting FastAPI backend..." -ForegroundColor Yellow
 $backendJob = Start-Job -ScriptBlock {
-    Set-Location $args[0]
+    param($projectPath)
+    Set-Location $projectPath
     $env:EXECUTION_MODE = "local"
-    python -m uvicorn api.backend:app --reload --port 8000
-} -ArgumentList (Get-Location)
+    & "$projectPath\.venv\Scripts\python.exe" -m uvicorn api.backend:app --reload --port 8000
+} -ArgumentList (Get-Location).Path
 
 # Wait for backend to start
 Start-Sleep -Seconds 5
@@ -27,10 +28,10 @@ Start-Sleep -Seconds 5
 # Start the React frontend
 Write-Host "Starting React frontend..." -ForegroundColor Yellow
 $frontendJob = Start-Job -ScriptBlock {
-    Set-Location $args[0]
-    Set-Location "risk-analytics-ui"
-    npm run dev:local
-} -ArgumentList (Get-Location)
+    param($projectPath)
+    Set-Location "$projectPath\risk-analytics-ui"
+    & npm run dev:local
+} -ArgumentList (Get-Location).Path
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Local Mode Started Successfully!" -ForegroundColor Green
@@ -49,18 +50,26 @@ try {
         # Check if jobs are still running
         if ($backendJob.State -ne "Running") {
             Write-Host "Backend job stopped unexpectedly" -ForegroundColor Red
+            $backendJobError = Receive-Job $backendJob -ErrorAction SilentlyContinue
+            if ($backendJobError) {
+                Write-Host "Backend error: $backendJobError" -ForegroundColor Red
+            }
             break
         }
         if ($frontendJob.State -ne "Running") {
             Write-Host "Frontend job stopped unexpectedly" -ForegroundColor Red
+            $frontendJobError = Receive-Job $frontendJob -ErrorAction SilentlyContinue
+            if ($frontendJobError) {
+                Write-Host "Frontend error: $frontendJobError" -ForegroundColor Red
+            }
             break
         }
     }
 } finally {
     Write-Host "Stopping services..." -ForegroundColor Yellow
-    Stop-Job $backendJob
-    Stop-Job $frontendJob
-    Remove-Job $backendJob
-    Remove-Job $frontendJob
+    Stop-Job $backendJob -ErrorAction SilentlyContinue
+    Stop-Job $frontendJob -ErrorAction SilentlyContinue
+    Remove-Job $backendJob -ErrorAction SilentlyContinue
+    Remove-Job $frontendJob -ErrorAction SilentlyContinue
     Write-Host "Services stopped" -ForegroundColor Green
 }

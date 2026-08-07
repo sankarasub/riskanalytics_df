@@ -1,10 +1,9 @@
 import { Box, Container, AppBar, Toolbar, Typography, Tabs, Tab } from '@mui/material';
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [currentTab, setCurrentTab] = useState('/');
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: string) => {

@@ -1,6 +1,13 @@
 """Create Iceberg table contracts for legacy and source-to-ODS migration flows."""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 from risk_analytics.config import load_config
 from risk_analytics.spark import create_spark_session
 

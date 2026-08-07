@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 VENV_DIR = ROOT / ".venv"
 REQUIREMENTS_DIR = ROOT / "requirements"
 LOCK_FILE = ROOT / "requirements-lock.txt"
-REQUIRED_PYTHON = (3, 11)
+REQUIRED_PYTHON = (3, 11)  # Minimum required version
 
 
 def run(cmd: list[str], cwd: Path | None = None, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -83,11 +83,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    if sys.version_info[:2] != REQUIRED_PYTHON:
+    if sys.version_info[:2] < REQUIRED_PYTHON:
         detected = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         print(
-            f"Python 3.11 is required to match the Docker runtime images; found {detected}. "
-            "Install Python 3.11 and run this script with that interpreter.",
+            f"Python 3.11+ is required to match the Docker runtime images; found {detected}. "
+            "Install Python 3.11 or higher and run this script with that interpreter.",
             file=sys.stderr,
         )
         return 1

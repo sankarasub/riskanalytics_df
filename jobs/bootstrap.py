@@ -3,11 +3,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
+# Set execution mode to local by default
+if not os.environ.get("EXECUTION_MODE"):
+    os.environ["EXECUTION_MODE"] = "local"
+
+# Set JAVA_HOME for PySpark
+if not os.environ.get("JAVA_HOME"):
+    java_home = "C:\\Program Files\\Java\\jdk-24"
+    if os.path.exists(java_home):
+        os.environ["JAVA_HOME"] = java_home
+        os.environ["PATH"] = f"{java_home}\\bin;" + os.environ.get("PATH", "")
 
 from pyspark.sql.types import BooleanType, DateType, DecimalType, MapType, StringType, StructField, StructType
 

@@ -1,0 +1,180 @@
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: docker"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "docker"
+}"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:45:12.724427"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: nessie"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: remote"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: http://nessie:19120/api/v2"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: s3"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: cluster"}
+{"timestamp": "2026-08-03T07:45:12", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: airflow"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:45:19.179182"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T07:45:19", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:45:31.438614"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T07:45:31", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:46:29.717707"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T07:46:29", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:46:52.292775"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T07:46:52", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: docker"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "docker"
+}"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:50:32.965333"}
+{"timestamp": "2026-08-03T07:50:32", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: nessie"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: remote"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: http://nessie:19120/api/v2"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: s3"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: cluster"}
+{"timestamp": "2026-08-03T07:50:33", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: airflow"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T07:51:35.392610"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T07:51:35", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T08:10:23.200222"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T08:10:23", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "root", "message": "Logging system initialized"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "PIPELINE START: bootstrap"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Execution Mode: local"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Parameters: {
+  "action": "create-all-source-to-ods",
+  "table_name": null,
+  "as_of_date": "2026-07-18",
+  "execution_mode": "local"
+}"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "Start Time: 2026-08-03T08:11:44.933249"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "================================================================================"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "CONNECTION DETAILS:"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog: local"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog Type: local"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Catalog URI: file:///tmp/iceberg"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Type: local"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Storage Endpoint: http://seaweedfs:8333"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Spark Mode: local"}
+{"timestamp": "2026-08-03T08:11:44", "level": "INFO", "logger": "pipeline.bootstrap", "message": "  Orchestration: scripts"}

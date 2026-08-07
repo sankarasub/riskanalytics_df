@@ -1,4 +1,4 @@
-import { Box, Typography, Grid, Card, CardContent, TextField, MenuItem, Button, LinearProgress, Alert } from '@mui/material';
+import { Box, Typography, Grid, Card, CardContent, TextField, Button, LinearProgress, Alert } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { riskMetricsService, RiskMetricsSummary } from '../services/metricsService';
 
